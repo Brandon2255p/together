@@ -1,0 +1,129 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Together design tokens — mirror the Figma variables (collection "Together / Tokens").
+ * Colours, radii and shadows are Tailwind theme values: bg-surface, text-ink-muted, rounded-card, shadow-float…
+ */
+@theme {
+  /* surfaces */
+  --color-bg: #fbf8f4;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4efe9;
+  --color-line: #ece5de;
+
+  /* text */
+  --color-ink: #1f1a17;
+  --color-ink-muted: #7a706a;
+  --color-ink-subtle: #b5aca5;
+  --color-on-accent: #ffffff;
+
+  /* brand + people: Brandon = accent (coral), partner = periwinkle */
+  --color-accent: #ff6b4a;
+  --color-accent-soft: #ffe8e1;
+  --color-accent-ink: #c2401f;
+  --color-partner: #6c7bff;
+  --color-partner-soft: #e7eaff;
+  --color-partner-ink: #4250d1;
+
+  /* status */
+  --color-success: #2fa572;
+  --color-success-soft: #ddf3e8;
+  --color-success-ink: #1b7a51;
+  --color-warning: #e39b2d;
+  --color-warning-soft: #fcefd9;
+  --color-warning-ink: #9a6111;
+
+  /* radii */
+  --radius-chip: 999px;
+  --radius-field: 20px;
+  --radius-row: 20px;
+  --radius-card: 28px;
+  --radius-sheet: 32px;
+
+  /* elevation */
+  --shadow-card: 0 1px 2px rgb(64 38 26 / 0.04), 0 4px 16px rgb(64 38 26 / 0.06);
+  --shadow-float: 0 12px 32px -4px rgb(51 26 13 / 0.14);
+
+  /* motion */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@theme inline {
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+}
+
+/* Type scale — Figma text styles */
+@utility text-display-xl {
+  font-family: var(--font-display);
+  font-size: 44px;
+  line-height: 46px;
+  letter-spacing: -0.5px;
+  font-weight: 400;
+}
+@utility text-display-l {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 38px;
+  letter-spacing: -0.3px;
+  font-weight: 400;
+}
+@utility text-title {
+  font-size: 20px;
+  line-height: 26px;
+  letter-spacing: -0.2px;
+  font-weight: 600;
+}
+@utility text-body-strong {
+  font-size: 16px;
+  line-height: 22px;
+  letter-spacing: -0.1px;
+  font-weight: 600;
+}
+@utility text-body {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 400;
+}
+@utility text-callout {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+}
+@utility text-caption {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+@utility text-overline {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+    overscroll-behavior-y: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
