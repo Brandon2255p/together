@@ -6,18 +6,21 @@ import type {
   CatalogEntry,
   Chore,
   ChoreRepeat,
+  Coordinates,
   DataResult,
   DayKey,
   Goal,
+  GooglePlaceDetails,
   Hue,
   Member,
   MemberId,
   MemberTone,
   MutationResult,
   NewChore,
+  NewEvent,
+  NewGoal,
   NewPlace,
-  Coordinates,
-  GooglePlaceDetails,
+  NewWish,
   Place,
   PlaceQuery,
   PlaceStatus,
@@ -397,6 +400,41 @@ export class RealServerService implements ServerBackendService {
     return ok(data.map(toEvent));
   }
 
+  async addEvent({ title, day, time, location, attendees }: NewEvent): Promise<DataResult<CalendarEvent>> {
+    const sb = await createClient();
+    const { data, error } = await sb
+      .from("events")
+      .insert({ title, day, start_time: time, location })
+      .select("id")
+      .single()
+      .overrideTypes<{ id: string }, { merge: false }>();
+    if (error) return fail(message(error, "We couldn't add that to the calendar. Try again."));
+
+    if (attendees.length) {
+      const { error: attendError } = await sb
+        .from("event_attendees")
+        .insert(attendees.map((profile_id) => ({ event_id: data.id, profile_id })));
+      if (attendError) {
+        await sb.from("events").delete().eq("id", data.id);
+        return fail(message(attendError, "We couldn't add who's going. Try again."));
+      }
+    }
+    const { data: row, error: readError } = await sb
+      .from("events")
+      .select("id, title, day, start_time, location, event_attendees (profile_id)")
+      .eq("id", data.id)
+      .single()
+      .overrideTypes<EventRow, { merge: false }>();
+    if (readError) return fail(message(readError, "We couldn't load that event."));
+    return ok(toEvent(row));
+  }
+
+  async deleteEvent({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("events").delete().eq("id", id);
+    return error ? notSaved(message(error, "We couldn't remove that. Try again.")) : saved;
+  }
+
   // ---- Places -------------------------------------------------------------------
 
   async getPlaces(): Promise<DataResult<Place[]>> {
@@ -537,5 +575,65 @@ export class RealServerService implements ServerBackendService {
       default:
         return notSaved(message(error, TRY_AGAIN));
     }
+  }
+
+  async addWish({ name, price, url }: NewWish): Promise<DataResult<WishItem>> {
+    const sb = await createClient();
+    const meId = await currentUserId(sb);
+    if (!meId) return fail(SIGNED_OUT);
+    const hues: Hue[] = ["accent", "partner", "success", "warning"];
+    const { count } = await sb.from("wishes").select("id", { count: "exact", head: true }).eq("owner_id", meId);
+    const { data, error } = await sb
+      .from("wishes")
+      .insert({ name, price_cents: price === null ? null : Math.round(price * 100), url, hue: hues[(count ?? 0) % hues.length] ?? "accent" })
+      .select("id, owner_id, name, price_cents, url, hue, wish_claims (claimed_by)")
+      .single()
+      .overrideTypes<WishRow, { merge: false }>();
+    if (error) return fail(message(error, "We couldn't add that wish. Try again."));
+    return ok(toWish(data));
+  }
+
+  async deleteWish({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("wishes").delete().eq("id", id);
+    return error ? notSaved(message(error, "We couldn't remove that wish. Try again.")) : saved;
+  }
+
+  async addGoal({ title, target, ownerIds }: NewGoal): Promise<DataResult<Goal>> {
+    const sb = await createClient();
+    const { data, error } = await sb
+      .from("goals")
+      .insert({ title, target_cents: Math.round(target * 100) })
+      .select("id")
+      .single()
+      .overrideTypes<{ id: string }, { merge: false }>();
+    if (error) return fail(message(error, "We couldn't add that goal. Try again."));
+    const { error: ownerError } = await sb
+      .from("goal_owners")
+      .insert(ownerIds.map((profile_id) => ({ goal_id: data.id, profile_id })));
+    if (ownerError) {
+      await sb.from("goals").delete().eq("id", data.id);
+      return fail(message(ownerError, "We couldn't add that goal. Try again."));
+    }
+    return this.getGoal(data.id);
+  }
+
+  async setGoalSaved({ id, saved: amount }: { id: string; saved: number }): Promise<DataResult<Goal>> {
+    const sb = await createClient();
+    const { error } = await sb.from("goals").update({ saved_cents: Math.round(amount * 100) }).eq("id", id);
+    if (error) return fail(message(error, "We couldn't save that. Try again."));
+    return this.getGoal(id);
+  }
+
+  private async getGoal(id: string): Promise<DataResult<Goal>> {
+    const sb = await createClient();
+    const { data, error } = await sb
+      .from("goals")
+      .select("id, title, saved_cents, target_cents, goal_owners (profile_id)")
+      .eq("id", id)
+      .maybeSingle()
+      .overrideTypes<GoalRow | null, { merge: false }>();
+    if (error) return fail(message(error, "We couldn't load that goal."));
+    return data ? ok(toGoal(data)) : fail("That goal was removed.");
   }
 }
