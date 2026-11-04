@@ -39,3 +39,24 @@ export async function addChore(chore: NewChore) {
 export async function setChoreDone(id: string, done: boolean) {
   return serverBackend.setChoreDone({ id, done });
 }
+
+export async function updateShoppingItem(id: string, name: string, quantity: number) {
+  const trimmed = name.trim();
+  if (!trimmed) return { data: null, error: "Give the item a name." };
+  return serverBackend.updateShoppingItem({ id, name: trimmed.slice(0, 80), quantity: Math.min(99, Math.max(1, Math.round(quantity))) });
+}
+
+export async function deleteShoppingItem(id: string) {
+  return serverBackend.deleteShoppingItem({ id });
+}
+
+export async function updateChore(id: string, chore: NewChore) {
+  const title = chore.title.trim();
+  if (!title) return { data: null, error: "Give the chore a name." };
+  if (!chore.assignees.length) return { data: null, error: "Assign it to at least one person." };
+  return serverBackend.updateChore({ id, ...chore, title: title.slice(0, 120) });
+}
+
+export async function deleteChore(id: string) {
+  return serverBackend.deleteChore({ id });
+}

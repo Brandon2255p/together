@@ -459,6 +459,25 @@ export class RealServerService implements ServerBackendService {
     return data.length ? saved : notSaved("That item was removed.");
   }
 
+  async updateShoppingItem({ id, name, quantity }: { id: string; name: string; quantity: number }): Promise<DataResult<ShoppingItem>> {
+    const sb = await createClient();
+    const { data, error } = await sb
+      .from("shopping_items")
+      .update({ name, quantity: Math.min(99, quantity) })
+      .eq("id", id)
+      .select("id, name, quantity, added_by, done_at")
+      .maybeSingle()
+      .overrideTypes<ShoppingRow | null, { merge: false }>();
+    if (error) return fail(message(error, "We couldn't save that item. Try again."));
+    return data ? ok(toShoppingItem(data)) : fail("That item was removed.");
+  }
+
+  async deleteShoppingItem({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("shopping_items").delete().eq("id", id);
+    return error ? notSaved(message(error, "We couldn't remove that item. Try again.")) : saved;
+  }
+
   async clearDoneShoppingItems(): Promise<MutationResult> {
     const sb = await createClient();
     const { error } = await sb.from("shopping_items").delete().not("done_at", "is", null);
@@ -505,6 +524,31 @@ export class RealServerService implements ServerBackendService {
     const { error } = await sb.rpc("v1_set_chore_done", { p_chore_id: id, p_done: done });
     if (error) return fail(message(error, TRY_AGAIN));
     return this.getChore(id);
+  }
+
+  async updateChore({ id, title, due, repeat, assignees }: { id: string } & NewChore): Promise<DataResult<Chore>> {
+    const sb = await createClient();
+    const { data, error } = await sb.from("chores").update({ title, due, repeat }).eq("id", id).select("id");
+    if (error) return fail(message(error, "We couldn't save that chore. Try again."));
+    if (!data.length) return fail("That chore was removed.");
+
+    // add the new people first, then take off the rest, so the chore is never left with nobody on it
+    const add = await sb
+      .from("chore_assignees")
+      .upsert(
+        assignees.map((profile_id) => ({ chore_id: id, profile_id })),
+        { onConflict: "chore_id,profile_id", ignoreDuplicates: true }
+      );
+    if (add.error) return fail(message(add.error, "We couldn't change who it's for. Try again."));
+    const drop = await sb.from("chore_assignees").delete().eq("chore_id", id).not("profile_id", "in", `(${assignees.join(",")})`);
+    if (drop.error) return fail(message(drop.error, "We couldn't change who it's for. Try again."));
+    return this.getChore(id);
+  }
+
+  async deleteChore({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("chores").delete().eq("id", id);
+    return error ? notSaved(message(error, "We couldn't delete that chore. Try again.")) : saved;
   }
 
   private async getChore(id: string): Promise<DataResult<Chore>> {

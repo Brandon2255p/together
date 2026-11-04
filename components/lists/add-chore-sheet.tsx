@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarIcon, CheckIcon, UsersIcon } from "lucide-react";
+import { useState } from "react";
+import { CalendarIcon, CheckIcon, Trash2Icon, UsersIcon } from "lucide-react";
 import type { ChoreRepeat, DayKey, Member } from "@/lib/models";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,9 @@ export interface AddChoreSheetProps {
   onSubmit: () => void;
   pending: boolean;
   error: string | null;
+  /** "edit" changes an existing chore: Save instead of Add, and a Delete */
+  mode?: "add" | "edit";
+  onDelete?: () => void;
 }
 
 const REPEATS: { value: ChoreRepeat; label: string }[] = [
@@ -49,7 +53,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function AddChoreSheet(props: AddChoreSheetProps) {
-  const { open, onOpenChange, draft, onDraftChange, dueOptions, customDueLabel, members, onSubmit, pending, error } = props;
+  const { open, onOpenChange, draft, onDraftChange, dueOptions, customDueLabel, members, onSubmit, pending, error, mode = "add", onDelete } = props;
+  // UI-only: Delete asks once more before it happens
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const editing = mode === "edit";
   const isQuick = dueOptions.some((o) => o.value === draft.due);
   const toggle = (id: string) =>
     onDraftChange({
@@ -57,7 +64,15 @@ export function AddChoreSheet(props: AddChoreSheetProps) {
     });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} eyebrow="New chore" title={draft.title.trim() || "What needs doing?"}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        setConfirmingDelete(false);
+        onOpenChange(next);
+      }}
+      eyebrow={editing ? "Edit chore" : "New chore"}
+      title={draft.title.trim() || "What needs doing?"}
+    >
       <form
         className="flex flex-col gap-5"
         onSubmit={(e) => {
@@ -68,7 +83,8 @@ export function AddChoreSheet(props: AddChoreSheetProps) {
         <label className="flex flex-col gap-2.5">
           <span className="text-caption text-ink-muted">Chore</span>
           <input
-            autoFocus
+            autoFocus={!editing}
+            maxLength={120}
             value={draft.title}
             onChange={(e) => onDraftChange({ title: e.target.value })}
             placeholder="e.g. Water the plants"
@@ -138,8 +154,28 @@ export function AddChoreSheet(props: AddChoreSheetProps) {
 
         <InlineError>{error}</InlineError>
         <Button type="submit" block pending={pending}>
-          Add chore
+          {editing ? "Save" : "Add chore"}
         </Button>
+        {editing && onDelete ? (
+          confirmingDelete ? (
+            <div className="-mt-2 flex flex-col gap-2">
+              <p className="text-center text-caption text-ink-muted">Delete it for everyone? This can&apos;t be undone.</p>
+              <div className="flex gap-2">
+                <Button variant="ghost" className="flex-1" onClick={() => setConfirmingDelete(false)}>
+                  Keep it
+                </Button>
+                <Button variant="accent" className="flex-1" onClick={onDelete}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="ghost" block className="-mt-2 text-accent-ink" onClick={() => setConfirmingDelete(true)}>
+              <Trash2Icon className="size-4" aria-hidden />
+              Delete chore
+            </Button>
+          )
+        ) : null}
       </form>
     </Sheet>
   );

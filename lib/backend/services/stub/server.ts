@@ -13,6 +13,7 @@ import type {
   MemberRole,
   MemberTone,
   MutationResult,
+  NewChore,
   NewEvent,
   NewGoal,
   NewPlace,
@@ -22,6 +23,7 @@ import type {
   PlaceChanges,
   PlaceQuery,
   PushSubscriptionKeys,
+  ShoppingItem,
   Together,
   TogetherSummary,
   WishItem,
@@ -289,6 +291,22 @@ export class StubServerService implements ServerBackendService {
     return done;
   }
 
+  async updateShoppingItem({ id: itemId, name, quantity }: { id: string; name: string; quantity: number }) {
+    await wait();
+    log("updateShoppingItem", { id: itemId, name, quantity });
+    const item = state().shopping.find((i) => i.id === itemId);
+    if (!item) return fail<ShoppingItem>("That item was removed.");
+    Object.assign(item, { name, quantity });
+    return ok(item);
+  }
+
+  async deleteShoppingItem({ id: itemId }: { id: string }) {
+    await wait();
+    log("deleteShoppingItem", { id: itemId });
+    state().shopping = state().shopping.filter((i) => i.id !== itemId);
+    return done;
+  }
+
   async clearDoneShoppingItems() {
     await wait();
     log("clearDoneShoppingItems");
@@ -323,6 +341,22 @@ export class StubServerService implements ServerBackendService {
       chore.done = isDone;
     }
     return ok(chore);
+  }
+
+  async updateChore({ id: choreId, ...changes }: { id: string } & NewChore) {
+    await wait();
+    log("updateChore", { id: choreId, ...changes });
+    const chore = state().chores.find((c) => c.id === choreId);
+    if (!chore) return fail<Chore>("That chore was removed.");
+    Object.assign(chore, changes);
+    return ok(chore);
+  }
+
+  async deleteChore({ id: choreId }: { id: string }) {
+    await wait();
+    log("deleteChore", { id: choreId });
+    state().chores = state().chores.filter((c) => c.id !== choreId);
+    return done;
   }
 
   async getEvents({ from, to }: { from: string; to: string }) {

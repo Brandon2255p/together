@@ -69,6 +69,8 @@ export interface ServerBackendService {
   getItemCatalog(): Promise<DataResult<CatalogEntry[]>>;
   addShoppingItem(params: { name: string; quantity: number }): Promise<DataResult<ShoppingItem>>;
   setShoppingItemDone(params: { id: string; done: boolean }): Promise<MutationResult>;
+  updateShoppingItem(params: { id: string; name: string; quantity: number }): Promise<DataResult<ShoppingItem>>;
+  deleteShoppingItem(params: { id: string }): Promise<MutationResult>;
   /** removes every item in the basket */
   clearDoneShoppingItems(): Promise<MutationResult>;
 
@@ -77,6 +79,9 @@ export interface ServerBackendService {
   addChore(params: NewChore): Promise<DataResult<Chore>>;
   /** a recurring chore that's done moves on to its next due date instead */
   setChoreDone(params: { id: string; done: boolean }): Promise<DataResult<Chore>>;
+  /** changes the title, due date, repeat and who it's for */
+  updateChore(params: { id: string } & NewChore): Promise<DataResult<Chore>>;
+  deleteChore(params: { id: string }): Promise<MutationResult>;
 
   // Calendar
   /** events from `from` to `to`, both included */

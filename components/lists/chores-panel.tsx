@@ -13,12 +13,13 @@ export interface ChoresPanelProps<F extends string> {
   onFilterChange: (filter: F) => void;
   sections: { key: string; title: string; rows: ChoreRowData[] }[];
   onDoneChange: (id: string, done: boolean) => void;
+  onOpen: (id: string) => void;
   onAddPress: () => void;
   error: string | null;
 }
 
 export function ChoresPanel<F extends string>(props: ChoresPanelProps<F>) {
-  const { filters, filter, onFilterChange, sections, onDoneChange, onAddPress, error } = props;
+  const { filters, filter, onFilterChange, sections, onDoneChange, onOpen, onAddPress, error } = props;
   return (
     <div className="flex flex-col gap-5">
       <button
@@ -51,7 +52,7 @@ export function ChoresPanel<F extends string>(props: ChoresPanelProps<F>) {
             <AnimatePresence initial={false} mode="popLayout">
               {section.rows.map((row) => (
                 <ListItem key={row.key ?? row.id}>
-                  <ChoreRow row={row} onDoneChange={onDoneChange} />
+                  <ChoreRow row={row} onDoneChange={onDoneChange} onOpen={onOpen} />
                 </ListItem>
               ))}
             </AnimatePresence>

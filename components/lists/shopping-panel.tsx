@@ -30,13 +30,15 @@ export interface ShoppingPanelProps {
   toBuy: ShoppingRowData[];
   inBasket: ShoppingRowData[];
   onDoneChange: (id: string, done: boolean) => void;
+  /** opens the item to change its name or quantity, or remove it */
+  onOpen: (id: string) => void;
   onClearBasket: () => void;
   error: string | null;
 }
 
 const REASON = { usual: { label: "Usual", tone: "accent" }, popular: { label: "Popular", tone: "neutral" } } as const;
 
-function Rows({ rows, onDoneChange }: { rows: ShoppingRowData[]; onDoneChange: ShoppingPanelProps["onDoneChange"] }) {
+function Rows({ rows, onDoneChange, onOpen }: { rows: ShoppingRowData[] } & Pick<ShoppingPanelProps, "onDoneChange" | "onOpen">) {
   return (
     <ul className="flex flex-col gap-2">
       <AnimatePresence initial={false} mode="popLayout">
@@ -47,6 +49,7 @@ function Rows({ rows, onDoneChange }: { rows: ShoppingRowData[]; onDoneChange: S
               done={row.done}
               onDoneChange={(done) => onDoneChange(row.id, done)}
               people={row.addedBy ? [row.addedBy] : []}
+              onOpen={() => onOpen(row.id)}
             />
           </ListItem>
         ))}
@@ -56,7 +59,7 @@ function Rows({ rows, onDoneChange }: { rows: ShoppingRowData[]; onDoneChange: S
 }
 
 export function ShoppingPanel(props: ShoppingPanelProps) {
-  const { query, onQueryChange, suggestions, onAdd, toBuy, inBasket, onDoneChange, onClearBasket, error } = props;
+  const { query, onQueryChange, suggestions, onAdd, toBuy, inBasket, onDoneChange, onOpen, onClearBasket, error } = props;
   // UI-only state: whether the field has focus and which suggestion the arrow keys are on
   const [focused, setFocused] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -158,7 +161,7 @@ export function ShoppingPanel(props: ShoppingPanelProps) {
       {toBuy.length ? (
         <section className="flex flex-col gap-3">
           <SectionHeader title={`To buy · ${toBuy.length}`} />
-          <Rows rows={toBuy} onDoneChange={onDoneChange} />
+          <Rows rows={toBuy} onDoneChange={onDoneChange} onOpen={onOpen} />
         </section>
       ) : null}
 
@@ -172,7 +175,7 @@ export function ShoppingPanel(props: ShoppingPanelProps) {
               </button>
             }
           />
-          <Rows rows={inBasket} onDoneChange={onDoneChange} />
+          <Rows rows={inBasket} onDoneChange={onDoneChange} onOpen={onOpen} />
         </section>
       ) : null}
     </div>

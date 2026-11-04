@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { addChore, setChoreDone } from "@/lib/actions/lists";
+import { addChore, deleteChore, setChoreDone, updateChore } from "@/lib/actions/lists";
 import type { Chore, NewChore } from "@/lib/models";
 import { TEMP, type Optimistic } from "./optimistic";
 import { useServerState } from "./server-state";
 
 /**
  * View-model hook shared by Home, Lists and Calendar: the chores and the IO that changes them.
- * Ticking and adding are optimistic; the server's answer (a recurring chore moves to its next date, a new chore gets
+ * Ticking, adding, editing and deleting are optimistic; the server's answer (a recurring chore moves to its next date, a new chore gets
  * its real id) replaces it, and a failure puts it back and reports the error.
  */
 export function useChores(initial: Chore[]) {
@@ -47,5 +47,35 @@ export function useChores(initial: Chore[]) {
     return true;
   }
 
-  return { chores, error, setError, toggle, add };
+  async function update(id: string, chore: NewChore): Promise<boolean> {
+    if (id.startsWith(TEMP)) return false;
+    const before = chores;
+    setError(null);
+    setChores((cs) => cs.map((c) => (c.id === id ? { ...c, ...chore } : c)));
+    const result = await updateChore(id, chore);
+    if (!result.data) {
+      setChores(before);
+      setError(result.error ?? "Couldn't save that chore.");
+      return false;
+    }
+    const saved = result.data;
+    setChores((cs) => cs.map((c) => (c.id === id ? { ...saved, clientKey: c.clientKey } : c)));
+    return true;
+  }
+
+  async function remove(id: string): Promise<boolean> {
+    if (id.startsWith(TEMP)) return false;
+    const before = chores;
+    setError(null);
+    setChores((cs) => cs.filter((c) => c.id !== id));
+    const result = await deleteChore(id);
+    if (!result.success) {
+      setChores(before);
+      setError(result.error ?? "Couldn't delete that chore.");
+      return false;
+    }
+    return true;
+  }
+
+  return { chores, error, setError, toggle, add, update, remove };
 }

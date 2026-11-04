@@ -16,9 +16,19 @@ export interface ChoreRowData {
   chips: { label: string; tone: ChipTone; repeat?: boolean }[];
 }
 
-export function ChoreRow({ row, onDoneChange }: { row: ChoreRowData; onDoneChange: (id: string, done: boolean) => void }) {
+export function ChoreRow({
+  row,
+  onDoneChange,
+  onOpen,
+}: {
+  row: ChoreRowData;
+  onDoneChange: (id: string, done: boolean) => void;
+  /** opens the chore to edit it */
+  onOpen?: (id: string) => void;
+}) {
   return (
     <TaskRow
+      onOpen={onOpen ? () => onOpen(row.id) : undefined}
       title={row.title}
       done={row.done}
       onDoneChange={(done) => onDoneChange(row.id, done)}
