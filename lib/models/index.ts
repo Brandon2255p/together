@@ -77,6 +77,8 @@ export interface CalendarEvent {
   attendees: MemberId[];
 }
 
+export type NewEvent = Omit<CalendarEvent, "id">;
+
 // ---- Places ---------------------------------------------------------------
 
 export type PlaceStatus = "been" | "want";
@@ -243,6 +245,11 @@ export interface Goal {
   /** more than one member: a shared goal */
   ownerIds: MemberId[];
 }
+
+/** a wish you add for yourself */
+export type NewWish = Pick<WishItem, "name" | "price" | "url">;
+
+export type NewGoal = Pick<Goal, "title" | "target" | "ownerIds">;
 
 // ---- Results --------------------------------------------------------------
 

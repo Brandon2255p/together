@@ -3,10 +3,11 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
-import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon } from "lucide-react";
+import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, UserRoundIcon } from "lucide-react";
 import type { Member } from "@/lib/models";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
 import { AvatarStack } from "@/components/ui/avatar";
+import { iconButtonVariants } from "@/components/ui/icon-button";
 import { IconBadge, InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
 import { ListItem, Reveal, RevealItem } from "@/components/ui/motion";
 import { Orb } from "@/components/ui/orb";
@@ -20,7 +21,7 @@ export interface HomeScreenProps {
   onChoreDoneChange: (id: string, done: boolean) => void;
   toBuy: number;
   wantToGo: number;
-  links: { chores: Route; shopping: Route; places: Route; calendar: Route };
+  links: { chores: Route; shopping: Route; places: Route; calendar: Route; profile: Route };
   error: string | null;
 }
 
@@ -41,7 +42,15 @@ export function HomeScreen(props: HomeScreenProps) {
   return (
     <Reveal className="flex flex-col gap-5">
       <RevealItem>
-        <ScreenHeader eyebrow={dateLabel} title={greeting} actions={<AvatarStack members={members} size="lg" />} />
+        <ScreenHeader eyebrow={dateLabel} title={greeting} actions={
+            <>
+              <AvatarStack members={members} size="lg" />
+              <Link href={links.profile} aria-label="You: your name and signing out" className={iconButtonVariants({ variant: "surface", size: "sm" })}>
+                <UserRoundIcon aria-hidden />
+              </Link>
+            </>
+          }
+        />
       </RevealItem>
 
       <RevealItem>
