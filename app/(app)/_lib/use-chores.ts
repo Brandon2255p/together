@@ -4,6 +4,7 @@ import { useState } from "react";
 import { addChore, setChoreDone } from "@/lib/actions/lists";
 import type { Chore, NewChore } from "@/lib/models";
 import { TEMP, type Optimistic } from "./optimistic";
+import { useServerState } from "./server-state";
 
 /**
  * View-model hook shared by Home, Lists and Calendar: the chores and the IO that changes them.
@@ -11,7 +12,7 @@ import { TEMP, type Optimistic } from "./optimistic";
  * its real id) replaces it, and a failure puts it back and reports the error.
  */
 export function useChores(initial: Chore[]) {
-  const [chores, setChores] = useState<Optimistic<Chore>[]>(initial);
+  const [chores, setChores] = useServerState<Optimistic<Chore>[]>(initial);
   const [error, setError] = useState<string | null>(null);
 
   async function toggle(id: string, done: boolean) {

@@ -11,6 +11,7 @@ import { suggestItems } from "@/lib/lists/suggest";
 import type { CatalogEntry, Chore, DayKey, ShoppingItem, Together } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
 import { TEMP, type Optimistic } from "../_lib/optimistic";
+import { useServerState } from "../_lib/server-state";
 import { useChores } from "../_lib/use-chores";
 
 export interface ListsViewData {
@@ -23,7 +24,7 @@ export interface ListsViewData {
 }
 
 function useShopping(initial: ShoppingItem[], catalog: CatalogEntry[], together: Together) {
-  const [items, setItems] = useState<Optimistic<ShoppingItem>[]>(initial);
+  const [items, setItems] = useServerState<Optimistic<ShoppingItem>[]>(initial);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
