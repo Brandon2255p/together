@@ -56,3 +56,16 @@ signs you in; `000000` fails so error states can be checked. Every stub call log
 Tokens (colours, type, radii, shadows) live in `app/globals.css` and mirror the Figma file
 (https://www.figma.com/design/PpfaPk3jkZjwmsL4JeNzYJ/Together). Components in `components/ui/` are the Figma
 components. `/design-system` shows every token and component.
+
+## Database: declarative schema
+
+The schema lives in `supabase/schemas` (`types/`, `tables/`, `internal/`, `functions_vN/`, `triggers/`,
+`realtime.sql`). Its load order is set by `schema_paths` in `supabase/config.toml`.
+
+- **Never create or edit files in `supabase/migrations` by hand.** Change the schema files, then run
+  `just create-migration <name>` to generate the migration.
+- **App-facing functions are versioned** like inboxforge: `functions_v1/v1_<name>.sql` defines `public.v1_<name>`.
+  To change a signature or behaviour, add `functions_v2/v2_<name>.sql` and keep v1 until no client uses it.
+- After any schema change, run `pnpm test:db`, and add checks to `supabase/tests/schema.test.mjs` for new rules.
+
+Details: `docs/database.md`.

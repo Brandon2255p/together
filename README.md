@@ -82,7 +82,8 @@ Open <http://localhost:3000>. The app runs on the **stub backend** by default, s
 | `pnpm lint` | ESLint, including the MVVM import boundaries. Zero warnings allowed. |
 | `pnpm typecheck` | `next typegen` + `tsc --noEmit` |
 | `pnpm test` | Vitest unit tests for the pure helpers in `lib/` |
-| `pnpm ci` | lint + typecheck + test |
+| `pnpm test:db` | Loads `supabase/schemas` on PGlite and checks row-level security as different users |
+| `pnpm run ci` | lint + typecheck + test + test:db |
 
 ### Environment
 
@@ -157,6 +158,18 @@ changes.
 | `/wishlist` | Goals, your wishes, and your partner's list |
 | `/design-system` | Every token and component (public) |
 
+### Database
+
+The Supabase schema is declarative, in `supabase/schemas/`. It has `tables/` and versioned `functions_v1/`
+folders, and migrations are generated from it with `just create-migration <name>`. Its main properties:
+
+- Every shared table belongs to a Together.
+- Row-level security keeps each couple's data to themselves.
+- Composite foreign keys stop rows from crossing between Togethers.
+- Wish claims live in their own table, so the database hides them from the wish's owner.
+
+The ER diagram, the reasoning and the setup steps are in **[docs/database.md](docs/database.md)**.
+
 ---
 
 ## Design system
@@ -182,7 +195,11 @@ Motion is meant to be calm, not busy:
 
 ## Deploying
 
-The project is deployed on Vercel from this repository's `main` branch.
+Together can be deployed on Vercel, or self-hosted with Docker next to a self-hosted Supabase (Coolify). For the
+self-hosted setup, see **[docs/deploy.md](docs/deploy.md)**: the `Dockerfile`, the `docker-compose.yml` with the full
+Supabase stack, the variables, and the CI workflows that test-build the image.
+
+On Vercel, the project deploys from this repository's `main` branch.
 
 1. Import the repo in Vercel. The framework is detected automatically.
 2. Set `USE_STUB_DATABASE=true` and `NEXT_PUBLIC_USE_STUB_DATABASE=true` to run the demo, or set the Supabase variables
@@ -198,7 +215,8 @@ For Supabase auth:
 
 ## Roadmap
 
-- [ ] Supabase schema, row-level security and the real `ServerBackendService`
+- [x] Supabase schema and row-level security ([docs/database.md](docs/database.md))
+- [ ] The real `ServerBackendService` on top of it
 - [ ] Logging visits and ratings from place detail
 - [ ] Adding calendar events and wishes from the app
 - [ ] Realtime sync between partners

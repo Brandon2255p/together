@@ -1,0 +1,74 @@
+name: Docker
+
+# Test-builds the image (nothing is pushed), then starts it and checks it answers.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: together:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # the stub backend, so the container runs without a Supabase stack
+          build-args: |
+            NEXT_PUBLIC_USE_STUB_DATABASE=true
+
+      - name: Run
+        run: docker run -d --name together -p 3000:3000 -e USE_STUB_DATABASE=true together:ci
+
+      - name: Wait until healthy
+        run: |
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' together)
+            echo "health: $status"
+            [ "$status" = healthy ] && exit 0
+            sleep 2
+          done
+          docker logs together
+          exit 1
+
+      - name: Smoke test
+        run: |
+          curl -fsS http://localhost:3000/api/health
+          curl -fsS -o /dev/null -w "sign-in %{http_code}\n" http://localhost:3000/sign-in
+          curl -fsS -o /dev/null -w "home %{http_code}\n" http://localhost:3000/home
+          curl -fsS -o /dev/null -w "design-system %{http_code}\n" http://localhost:3000/design-system
+
+      - name: Logs
+        if: always()
+        run: docker logs together || true
+
+  compose:
+    name: Validate docker-compose.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        # Coolify fills SERVICE_* in production; any value will do to check the file parses. exclude_from_hc is a
+        # Coolify-only key that plain Compose rejects, so it's dropped for the check.
+        run: |
+          for v in $(grep -oE '\$\{[A-Z0-9_]+' docker-compose.yml | tr -d '${' | sort -u); do export "$v=ci"; done
+          grep -v 'exclude_from_hc' docker-compose.yml > /tmp/compose.yml
+          docker compose -f /tmp/compose.yml --project-directory . config --quiet

@@ -1,0 +1,19 @@
+# keep the build context small, and keep local secrets out of the image
+node_modules
+.next
+out
+.git
+.github
+.vercel
+.claude
+.env
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+docs
+supabase/.temp
+supabase/.branches
+volumes
+Dockerfile
+docker-compose*.yml
+.DS_Store

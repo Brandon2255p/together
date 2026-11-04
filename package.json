@@ -9,7 +9,8 @@
     "lint": "next typegen && eslint --max-warnings 0 app components lib proxy.ts",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "ci": "pnpm lint && pnpm typecheck && pnpm test"
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:db",
+    "test:db": "node supabase/tests/schema.test.mjs"
   },
   "packageManager": "pnpm@12.11.2",
   "dependencies": {
@@ -30,6 +31,7 @@
     "three": "0.187.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "~0.3.16",
     "@tailwindcss/postcss": "4.3.4",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
