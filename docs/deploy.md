@@ -138,3 +138,27 @@ supabase db push --db-url "postgresql://postgres:<SERVICE_PASSWORD_POSTGRES>@<db
 |---|---|
 | [`ci.yml`](../.github/workflows/ci.yml) | lint + typecheck, then unit tests + database tests |
 | [`docker.yml`](../.github/workflows/docker.yml) | Test-builds the image with layer caching (never pushes), runs it in stub mode, waits for the health check, and requests `/api/health`, `/sign-in`, `/home` and `/design-system`. Applies every migration to the production Postgres image with the `supabase-migrate` container. Also validates `docker-compose.yml`. |
+| [`migrate.yml`](../.github/workflows/migrate.yml) | On every push to `main`: runs the database tests, then `supabase db push` to the hosted project `hskdrgvuexlapwqfeomg`. Only migrations the project hasn't recorded are applied. Needs the `SUPABASE_ACCESS_TOKEN` secret (and optionally `SUPABASE_DB_PASSWORD`), see [Hosted Supabase](#hosted-supabase). |
+
+## Hosted Supabase
+
+[`migrate.yml`](../.github/workflows/migrate.yml) pushes `supabase/migrations` to the hosted project
+`https://hskdrgvuexlapwqfeomg.supabase.co` on every push to `main`. Set its secrets once:
+
+```bash
+gh secret set SUPABASE_ACCESS_TOKEN
+```
+
+```bash
+gh secret set SUPABASE_DB_PASSWORD
+```
+
+- `SUPABASE_ACCESS_TOKEN` (required) is an access token from https://supabase.com/dashboard/account/tokens. A scoped
+  token needs `projects_read`, `database_pooling_config_read` and `branching_production_read`, plus
+  `database_write` if you don't set the password.
+- `SUPABASE_DB_PASSWORD` (optional) is the project's database password, from Project Settings > Database.
+
+Each command prompts for the value, so it never lands in your shell history. The workflow links the project first
+because that connects through the pooler over IPv4: GitHub runners can't reach the direct IPv6 address.
+`supabase/config.toml` targets Postgres 15 to match the Docker stack. Migrations written for 15 also run on a newer
+hosted project.

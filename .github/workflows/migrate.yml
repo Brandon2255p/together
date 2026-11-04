@@ -1,0 +1,62 @@
+name: Migrate
+
+# On every push to main, push supabase/migrations to the hosted Supabase project. `supabase db push` only applies
+# migrations the project hasn't recorded yet, so a push with no new migrations changes nothing.
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   SUPABASE_ACCESS_TOKEN  required. An access token from https://supabase.com/dashboard/account/tokens. A scoped token
+#                          needs projects_read, database_pooling_config_read, branching_production_read and, unless
+#                          SUPABASE_DB_PASSWORD is set, database_write.
+#   SUPABASE_DB_PASSWORD   optional. The project's database password (Project Settings > Database). With it the CLI
+#                          connects to Postgres as postgres; without it, it pushes through the API with the token.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# never two pushes at once, and never cancel one halfway
+concurrency:
+  group: migrate-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_PROJECT_REF: hskdrgvuexlapwqfeomg
+
+jobs:
+  migrate:
+    name: Push migrations to Supabase
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      # hosted changes need an explicit yes
+      SUPABASE_YES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Access token is set
+        run: '[ -n "$SUPABASE_ACCESS_TOKEN" ] || { echo "::error::set the SUPABASE_ACCESS_TOKEN secret"; exit 1; }'
+
+      # the schema's own tests first, so a broken schema never reaches the database
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:db
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.0.0
+      # Linking looks up the project's connection pooler, which is IPv4. GitHub runners have no IPv6, and the
+      # direct db.<ref>.supabase.co address is IPv6 only.
+      - name: Link
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Pending migrations
+        run: supabase migration list --remote ${SUPABASE_DB_PASSWORD:+--password "$SUPABASE_DB_PASSWORD"}
+      - name: Push
+        run: supabase db push --remote ${SUPABASE_DB_PASSWORD:+--password "$SUPABASE_DB_PASSWORD"}
