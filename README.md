@@ -234,10 +234,10 @@ For Supabase auth:
 - [x] Supabase schema and row-level security ([docs/database.md](docs/database.md))
 - [x] The real `ServerBackendService` on top of it
 - [x] Places matched on Google Places from a Maps link
-- [ ] Logging visits and ratings from place detail
-- [ ] Adding places by searching Google (autocomplete), by hand, and editing them
-- [ ] Filtering and grouping places by city, province and country
-- [ ] Members, invites and more than one Together per person
+- [x] Logging visits and ratings from place detail
+- [x] Adding places by searching Google (autocomplete), by hand, and editing them
+- [x] Filtering and grouping places by city, province and country
+- [x] Members, invites and more than one Together per person
 - [x] Changing your own name, and signing out (`/profile`)
 - [x] Adding and removing calendar plans, wishes and savings goals from the app
 - [x] Realtime sync between partners (Supabase Realtime; pages reload their data when the other person changes something)
