@@ -72,3 +72,11 @@ jobs:
           for v in $(grep -oE '\$\{[A-Z0-9_]+' docker-compose.yml | tr -d '${' | sort -u); do export "$v=ci"; done
           grep -v 'exclude_from_hc' docker-compose.yml > /tmp/compose.yml
           docker compose -f /tmp/compose.yml --project-directory . config --quiet
+      - name: Bind-mounted files exist
+        # Compose would silently create a missing bind source as an empty directory, and the service then fails.
+        run: |
+          missing=0
+          for p in $(grep -A1 'source: \./' docker-compose.yml | grep -oE '\./[^ ]+'); do
+            [ -f "$p" ] || { echo "::error::missing $p"; missing=1; }
+          done
+          exit $missing

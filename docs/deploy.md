@@ -68,8 +68,12 @@ Tailscale variables:
 | Variable | Value |
 |---|---|
 | `TS_AUTHKEY` | A **reusable** auth key, since both sidecars use it. Tag it (e.g. `tag:together`) so the nodes don't expire with your user. |
-| `TS_TAILNET` | Your tailnet's MagicDNS suffix, e.g. `tail1234.ts.net`. The URLs above are built from it. |
-| `PUBLIC_SUPABASE_URL`, `PUBLIC_APP_URL` | Optional. Set them to override the tailnet URLs, e.g. to use Coolify's public domains. |
+| `PUBLIC_APP_URL` | **Required.** The app's tailnet URL, e.g. `https://together.tail1234.ts.net`. Auth uses it as the site URL. |
+| `PUBLIC_SUPABASE_URL` | **Required.** Kong's tailnet URL, e.g. `https://together-supabase.tail1234.ts.net`. Compiled into the app, and used by Auth, Studio, Storage and Functions as the public URL. |
+
+Write both as literal URLs. Coolify copies compose defaults into its `.env`, and Compose doesn't expand a variable
+inside another variable's default there. That's why these aren't built from a tailnet name. If either is missing,
+the deploy stops with `set PUBLIC_APP_URL` or `set PUBLIC_SUPABASE_URL`.
 
 Each sidecar keeps its node identity in `./ts/<name>/state`. That directory holds private keys, and it's gitignored.
 HTTPS and MagicDNS must be on for the tailnet (in the Tailscale admin, under DNS).
@@ -77,16 +81,16 @@ HTTPS and MagicDNS must be on for the tailnet (in the Tailscale admin, under DNS
 Steps:
 
 1. Create a Docker Compose resource in Coolify from this repository, using `docker-compose.yml`.
-2. Make sure the Supabase support files the compose binds exist next to it:
-   - `volumes/api/kong.yml` and `volumes/api/kong-entrypoint.sh`
-   - `volumes/db/*.sql`
-   - `volumes/logs/vector.yml`
-   - `volumes/pooler/pooler.exs`
-   - `volumes/functions/…`
-   - `entrypoint.sh`
+2. The Supabase support files the compose binds ship in this repo:
+   - `volumes/`: Kong config, database init SQL, Vector, the pooler and the edge-function runtime. These are copied
+     unchanged from [supabase/supabase `docker/volumes`](https://github.com/supabase/supabase/tree/master/docker/volumes)
+     (Apache-2.0).
+   - `entrypoint.sh`: creates the `stub` MinIO bucket that Storage uses.
 
-   Coolify's Supabase template provides these. They aren't in this repo.
-3. Set `TS_AUTHKEY` and `TS_TAILNET`.
+   CI fails if any bind-mounted file is missing. Without the file, Compose creates an empty directory in its place and
+   the service crashes.
+3. Set `TS_AUTHKEY`, `PUBLIC_APP_URL` and `PUBLIC_SUPABASE_URL`. Delete any `TS_TAILNET`, `API_EXTERNAL_URL` or
+   `GOTRUE_SITE_URL` lines Coolify copied in earlier, since the compose no longer reads them.
 4. Set `USE_STUB_DATABASE=false`. Leave it unset to get the same default.
 5. Configure SMTP (`SMTP_*`) so sign-in codes can be emailed. Make the magic-link template send `{{ .Token }}`
    (`MAILER_TEMPLATES_MAGIC_LINK`), so users get a 6-digit code.
