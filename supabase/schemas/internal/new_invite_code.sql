@@ -12,3 +12,62 @@ as $$
 $$;
 
 revoke execute on function public.new_invite_code() from public, anon, authenticated;
+
+-- The tone for the next person to join: accent, partner, success, warning in join order, then round again.
+-- People who left keep their tone, so they still count.
+create or replace function public.next_member_tone(p_together_id uuid)
+returns public.member_tone
+language sql
+stable
+set search_path = ''
+as $$
+  select (enum_range(null::public.member_tone))[
+    1 + (select count(*)::int from public.together_members m where m.together_id = p_together_id) % 4
+  ];
+$$;
+
+revoke execute on function public.next_member_tone(uuid) from public, anon, authenticated;
+
+-- Makes p_together_id the signed-in user's current Together (null for none), and marks both the one they leave and
+-- the one they open as seen. Callers check membership first.
+create or replace function public.set_current_together(p_together_id uuid)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  me uuid := auth.uid();
+  previous uuid := public.my_together_id();
+begin
+  update public.together_members set last_seen_at = now()
+  where profile_id = me and together_id in (previous, p_together_id);
+  update public.profiles set current_together_id = p_together_id where id = me;
+end;
+$$;
+
+revoke execute on function public.set_current_together(uuid) from public, anon, authenticated;
+
+-- Raises unless the signed-in user owns their current Together. Returns its id.
+create or replace function public.require_owner()
+returns uuid
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  t_id uuid := public.my_together_id();
+begin
+  if t_id is null then
+    raise exception 'You''re not in a Together yet.' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.together_members
+    where together_id = t_id and profile_id = auth.uid() and left_at is null and role = 'owner'
+  ) then
+    raise exception 'Only an owner can do that.' using errcode = '42501';
+  end if;
+  return t_id;
+end;
+$$;
+
+revoke execute on function public.require_owner() from public, anon, authenticated;

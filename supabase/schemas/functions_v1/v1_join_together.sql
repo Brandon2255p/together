@@ -1,4 +1,5 @@
 -- Join with an invite code. Spaces, dashes and case don't matter.
+-- Superseded by v2_join_together (which allows many Togethers); kept until no app calls it.
 create or replace function public.v1_join_together(p_code text)
 returns uuid
 language plpgsql
@@ -28,7 +29,8 @@ begin
     raise exception 'You''re already in a Together.' using errcode = '23505';
   end if;
 
-  select tone into free_tone from unnest(enum_range(null::public.member_tone)) as tone
+  -- v1 keeps its two-person rule: only the first two tones
+  select tone into free_tone from unnest(array['accent', 'partner']::public.member_tone[]) as tone
   where tone not in (select m.tone from public.together_members m where m.together_id = t_id)
   limit 1;
 

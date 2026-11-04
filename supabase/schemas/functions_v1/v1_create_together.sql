@@ -1,4 +1,5 @@
--- Start a Together. You become its first member (accent).
+-- Start a Together. You become its first member (accent) and its owner.
+-- Superseded by v2_create_together (which allows many Togethers); kept until no app calls it.
 create or replace function public.v1_create_together(p_name text)
 returns uuid
 language plpgsql
@@ -26,7 +27,7 @@ begin
     end;
   end loop;
 
-  insert into public.together_members (together_id, profile_id, tone) values (t_id, me, 'accent');
+  insert into public.together_members (together_id, profile_id, tone, role) values (t_id, me, 'accent', 'owner');
   return t_id;
 end;
 $$;

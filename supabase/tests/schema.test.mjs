@@ -156,11 +156,90 @@ const goal = (await one("brandon", "insert into public.goals (title, saved_cents
 await as("brandon", "insert into public.goal_owners (goal_id, profile_id) values ($1, $2), ($1, $3)", [goal, U.brandon, U.adele]);
 check("shared goal has two owners", (await one("adele", "select count(*)::int n from public.goal_owners")).n === 2);
 
+// many Togethers (v2 functions and friends)
+const owner = async (t) => (await db.query("select profile_id from public.together_members where together_id = $1 and role = 'owner' and left_at is null", [t])).rows.map((r) => r.profile_id);
+check("the creator is the owner", (await owner(tB)).join() === U.brandon);
+const tF = (await one("brandon", "select public.v2_create_together('Family') id")).id;
+check("v2 create works while in another Together", !!tF);
+check("…and makes it current", (await one("brandon", "select public.my_together_id() id")).id === tF);
+check("Brandon now sees only Family's lists", (await rows("brandon", "select * from public.chores")).length === 0);
+const fCode = (await one("brandon", "select invite_code from public.togethers")).invite_code;
+check("Adele joins a second Together with v2", (await one("adele", "select public.v2_join_together($1) id", [fCode])).id === tF);
+check("…and it becomes her current one", (await one("adele", "select public.my_together_id() id")).id === tF);
+check("tones go in join order", (await one("adele", "select tone from public.together_members where profile_id = auth.uid()")).tone === "partner");
+await as("eve", "select public.v2_join_together($1)", [fCode]);
+await as("fred", "select public.v2_join_together($1)", [fCode]);
+const tones = (await db.query("select tone from public.together_members where together_id = $1 order by joined_at", [tF])).rows.map((r) => r.tone);
+check("four people get four tones", tones.join() === "accent,partner,success,warning", tones.join());
+check("joining again just opens it", (await one("fred", "select public.v2_join_together($1) id", [fCode])).id === tF);
+const mine = await rows("adele", "select * from public.v1_list_my_togethers()");
+check("Adele lists both her Togethers", mine.length === 2 && mine.filter((t) => t.is_current).length === 1, JSON.stringify(mine.map((t) => t.name)));
+const fam = mine.find((t) => t.id === tF);
+check("…with member counts and names", fam.member_count === 4 && fam.members.length === 4 && fam.role === "member");
+check("Adele sees Eve's profile through Family", (await rows("adele", "select * from public.profiles where id = $1", [U.eve])).length === 1);
+await fails("can't switch into a Together you're not in", "fred", "select public.v1_switch_together($1)", [tB], /not in that Together/);
+await as("adele", "select public.v1_switch_together($1)", [tB]);
+check("switching changes what you see", (await rows("adele", "select * from public.chores")).length === 4);
+await as("brandon", "insert into public.chores (title) values ('Family braai')");
+const news = (await rows("adele", "select * from public.v1_list_my_togethers()")).find((t) => t.id === tF);
+check("someone else's activity elsewhere shows as news", news.has_news === true && news.last_activity_at !== null);
+await as("adele", "select public.v1_switch_together($1)", [tF]);
+check("…until you open it", (await rows("adele", "select * from public.v1_list_my_togethers()")).every((t) => !t.has_news));
+
+const preview = await one("fred", "select * from public.v1_invite_preview($1)", [fCode.toLowerCase()]);
+check("an invite code previews its Together", preview.name === "Family" && preview.members.length === 4 && preview.already_member === true && preview.expired === false);
+check("a wrong code previews nothing", (await rows("fred", "select * from public.v1_invite_preview('ZZZZZZ')")).length === 0);
+
+// owners
+await fails("members can't make a new invite code", "adele", "select * from public.v1_new_invite_code()", [], /Only an owner/);
+const fresh = await one("brandon", "select * from public.v1_new_invite_code()");
+check("owners can, and the old code stops working", fresh.invite_code !== fCode);
+await fails("old code fails", "fred", "select public.v2_join_together($1)", [fCode], /didn't work/);
+await db.query("update public.togethers set invite_expires_at = now() - interval '1 minute' where id = $1", [tF]);
+const gone = "00000000-0000-0000-0000-000000000099";
+await db.query(`insert into auth.users (id, email) values ($1, 'gus@example.com')`, [gone]);
+U.gus = gone;
+await fails("expired code", "gus", "select public.v2_join_together($1)", [fresh.invite_code], /expired/);
+await as("brandon", "select * from public.v1_new_invite_code()");
+await fails("members can't remove anyone", "adele", "select public.v1_remove_member($1)", [U.eve], /Only an owner/);
+await fails("owners can't remove themselves", "brandon", "select public.v1_remove_member($1)", [U.brandon], /leave/);
+await fails("members can't promote", "adele", "select public.v1_set_member_role($1, 'owner')", [U.adele], /Only an owner/);
+await fails("the only owner can't step down", "brandon", "select public.v1_set_member_role($1, 'member')", [U.brandon], /needs an owner/);
+await as("brandon", "select public.v1_set_member_role($1, 'owner')", [U.adele]);
+check("owners can make someone an owner", (await owner(tF)).length === 2);
+await as("eve", "insert into public.wishes (name) values ('Eve''s book')");
+await as("brandon", "select public.v1_remove_member($1)", [U.eve]);
+check("removed members' wishes stay", (await rows("brandon", "select * from public.wishes where owner_id = $1", [U.eve])).length === 1);
+check("…and their name still shows", (await rows("brandon", "select * from public.profiles where id = $1", [U.eve])).length === 1);
+check("removed members lose access", (await rows("eve", "select * from public.togethers where id = $1", [tF])).length === 0);
+check("…and fall back to their own Together", (await one("eve", "select public.my_together_id() id")).id !== tF);
+await as("eve", "update public.wishes set name = 'x'");
+check("…and can't edit what they left behind", (await rows("brandon", "select name from public.wishes where name = 'x'")).length === 0);
+await fails("can't remove someone twice", "brandon", "select public.v1_remove_member($1)", [U.eve], /not in this Together/);
+
 // leaving
+await as("adele", "select public.v1_switch_together($1)", [tB]);
 await as("adele", "delete from public.together_members where profile_id = auth.uid()");
-check("Adele can leave; her wish goes with her", (await rows("brandon", "select * from public.wishes")).length === 1);
-check("…and her chore assignment", (await one("brandon", "select count(*)::int n from public.chore_assignees")).n === 1);
+check("deleting a membership directly does nothing", (await db.query("select count(*)::int n from public.together_members where profile_id = $1", [U.adele])).rows[0].n === 2);
+const landed = (await one("adele", "select public.v1_leave_together() id")).id;
+check("leaving lands you in another Together", landed === tF);
+await as("brandon", "select public.v1_switch_together($1)", [tB]);
+check("what Adele added stays: her wish", (await rows("brandon", "select * from public.wishes where owner_id = $1", [U.adele])).length === 1);
+check("…and her chore assignment", (await one("brandon", "select count(*)::int n from public.chore_assignees")).n === 2);
 check("Brandon's list is untouched", (await rows("brandon", "select * from public.chores")).length === 4);
+check("her name still shows", (await rows("brandon", "select * from public.profiles where id = $1", [U.adele])).length === 1);
+const back = (await one("brandon", "select invite_code from public.togethers")).invite_code;
+check("rejoining brings her back with her tone", (await one("adele", "select public.v2_join_together($1) id", [back])).id === tB
+  && (await one("adele", "select tone from public.together_members where profile_id = auth.uid()")).tone === "partner");
+await as("brandon", "select public.v1_switch_together($1)", [tF]);
+await as("adele", "select public.v1_switch_together($1)", [tF]);
+await as("adele", "select public.v1_set_member_role($1, 'member')", [U.adele]);
+await fails("the only owner has to hand over first", "brandon", "select public.v1_leave_together()", [], /owner before you leave/);
+await as("fred", "select public.v1_leave_together()");
+await as("adele", "select public.v1_leave_together()");
+check("the last owner can leave when nobody else is left", (await one("brandon", "select public.v1_leave_together() id")).id === tB);
+check("…and the Together is deleted", (await db.query("select count(*)::int n from public.togethers where id = $1", [tF])).rows[0].n === 0);
+check("Fred has no Together left", (await one("fred", "select public.my_together_id() id")).id === null);
 
 // anon
 await db.exec("set role anon");
