@@ -92,53 +92,86 @@ export interface Visit {
   rating: number | null;
 }
 
+export interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 export interface Place {
   id: string;
   name: string;
+  /** the kind: Restaurant, Café, Bar, Bakery, Hike, Other… */
   category: string;
+  /** suburb or neighbourhood */
   area: string;
+  /** only for places added by hand; a Google place's street is fetched fresh (GooglePlaceDetails) */
+  street: string;
+  city: string;
+  province: string;
+  country: string;
   mapsUrl: string | null;
   status: PlaceStatus;
   /** each member rates on their own, 1–5 */
   ratings: Partial<Record<MemberId, number>>;
   visits: Visit[];
   hue: Hue;
-  /** the place's rating on Google Maps, 1–5, when it was matched on Google */
-  googleRating: number | null;
-  /** a photo of the place (our /api/places/<id>/photo route), when Google has one */
-  photoUrl: string | null;
+  /** set when the place was matched on Google; its details are fetched fresh, never stored */
+  googlePlaceId: string | null;
+  /** from Google, kept at most 30 days (Google's terms); `fetchedAt` is an ISO time */
+  location: (Coordinates & { fetchedAt: string }) | null;
 }
 
 export interface NewPlace {
   name: string;
-  /** the street and suburb or city, read from the Maps link; null when we don't know it */
-  area: string | null;
-  /** "Shopping mall", "Coffee shop"… from Google; null for "Saved place" */
   category: string | null;
+  /** area, street, city, province, country: "" when unknown */
+  area: string;
+  street: string;
+  city: string;
+  province: string;
+  country: string;
   mapsUrl: string | null;
   status: PlaceStatus;
-  /** what matched on Google Places, or null when we didn't look it up or found nothing */
-  google: GooglePlaceRef | null;
-}
-
-export interface GooglePlaceRef {
-  placeId: string;
-  rating: number | null;
-  /** the Places API resource name of its first photo, "places/<id>/photos/<ref>" */
-  photo: string | null;
+  googlePlaceId: string | null;
+  location: Coordinates | null;
 }
 
 /** what to look up on Google Places: a name (with the area when known), near the pin when the link had one */
 export interface PlaceQuery {
   text: string;
-  near: { lat: number; lng: number } | null;
+  near: Coordinates | null;
 }
 
-/** the best match on Google Places for a PlaceQuery */
-export interface PlaceMatch extends GooglePlaceRef {
+/** where a place is, as Google words it, split into the fields we filter and group by */
+export interface PlaceAddress {
+  street: string;
+  area: string;
+  city: string;
+  province: string;
+  country: string;
+}
+
+/**
+ * A Google place, fetched fresh to show (never stored, per Google's terms).
+ * The extras (rating, hours, photo) are only filled when asked for: they cost more.
+ */
+export interface GooglePlaceDetails {
+  placeId: string;
   name: string;
-  category: string | null;
-  area: string | null;
+  /** Google's primary type, e.g. "japanese_restaurant" */
+  primaryType: string | null;
+  formattedAddress: string | null;
+  address: PlaceAddress;
+  location: Coordinates | null;
+  googleMapsUri: string | null;
+  rating: number | null;
+  ratingCount: number | null;
+  /** null when Google doesn't know the hours */
+  openNow: boolean | null;
+  /** "22:00" in the place's own time, when it's open now and closes today */
+  closesAt: string | null;
+  /** a key-free image URL with the photographer's credit, which must be shown with it */
+  photo: { url: string; credit: string | null; creditUrl: string | null } | null;
 }
 
 // ---- Wishlist -------------------------------------------------------------

@@ -130,13 +130,11 @@ await fails("can't rate for someone else", "brandon", "insert into public.place_
 await fails("rating is 1-5", "adele", "insert into public.place_ratings (place_id, rating) values ($1, 6)", [place], /check constraint/);
 await as("adele", "insert into public.visits (place_id, day, title, rating) values ($1, $2, 'Anniversary', 5)", [place, today]);
 check("logging a visit marks it been", (await one("brandon", "select status from public.places where id = $1", [place])).status === "been");
-const gPlace = await one(
-  "brandon",
-  "insert into public.places (name, google_place_id, google_rating, google_photo) values ('Zeitz MOCAA', 'ChIJabc', 4.6, 'places/ChIJabc/photos/xyz') returning google_rating",
-);
-check("keeps the Google rating", Number(gPlace.google_rating) === 4.6);
-await fails("Google rating is 1-5", "brandon", "insert into public.places (name, google_rating) values ('x', 5.5)", [], /check constraint/);
-await fails("Google photo must be a Places photo name", "brandon", "insert into public.places (name, google_photo) values ('x', 'https://evil.example/x.jpg')", [], /check constraint/);
+await as("brandon", "insert into public.places (name, google_place_id, city, country, lat, lng, location_fetched_at) values ('Zeitz MOCAA', 'ChIJ3dD0bFlnzB0R', 'Cape Town', 'South Africa', -33.9, 18.4, now())");
+await fails("one row per Google place per Together", "adele", "insert into public.places (name, google_place_id) values ('Zeitz again', 'ChIJ3dD0bFlnzB0R')", [], /duplicate key/);
+check("another Together can save the same Google place", (await one("eve", "insert into public.places (name, google_place_id) values ('Zeitz', 'ChIJ3dD0bFlnzB0R') returning id")).id !== undefined);
+await fails("coordinates come with the time they were fetched", "brandon", "insert into public.places (name, lat, lng) values ('x', -33.9, 18.4)", [], /check constraint/);
+await fails("a Google place id is just an id", "brandon", "insert into public.places (name, google_place_id) values ('x', 'https://evil.example')", [], /check constraint/);
 
 // wishlist
 const wish = (await one("adele", "insert into public.wishes (name, price_cents) values ('Ceramic vase', 85000) returning id")).id;

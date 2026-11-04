@@ -21,7 +21,6 @@ export interface PlaceCardData {
   subtitle: string;
   hue: Hue;
   rating: number | null;
-  photoUrl: string | null;
   badge: string | null;
   href: Route;
   /** stays the same when an optimistic row is swapped for the saved one, so it doesn't animate out and back in */
@@ -101,7 +100,7 @@ export function PlacesScreen(props: PlacesScreenProps) {
                   p.pending && "pointer-events-none",
                 )}
               >
-                <Thumb hue={p.hue} icon={<MapPinIcon />} src={p.photoUrl} />
+                <Thumb hue={p.hue} icon={<MapPinIcon />} />
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className={cn("truncate text-body-strong", p.pending && "text-ink-muted")}>{p.name}</span>
                   {p.pending ? (

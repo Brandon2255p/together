@@ -18,20 +18,20 @@ export interface StubState {
   nextId: number;
 }
 
-type SeedPlace = Omit<Place, "googleRating" | "photoUrl"> & Partial<Pick<Place, "googleRating" | "photoUrl">>;
+type SeedPlace = Omit<Place, "street" | "city" | "province" | "country" | "googlePlaceId" | "location"> &
+  Partial<Pick<Place, "street" | "city" | "province" | "country" | "googlePlaceId">>;
 
-/** a stand-in "photo" so the stub shows how places with a Google photo look (the real one comes from Google) */
-const STUB_PHOTO =
-  "data:image/svg+xml," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x2="0" y2="1">` +
-      `<stop offset="0" stop-color="#8fb8de"/><stop offset=".6" stop-color="#f3c9a5"/><stop offset="1" stop-color="#2f4858"/>` +
-      `</linearGradient></defs><rect width="400" height="300" fill="url(#g)"/>` +
-      `<path d="M0 230 L90 170 L150 205 L240 140 L330 190 L400 160 V300 H0Z" fill="#3d5a6c"/></svg>`,
-  );
-
-const withGoogle = (places: SeedPlace[]): Place[] =>
-  places.map((p) => ({ googleRating: null, photoUrl: null, ...p }));
+/** the seed places are all in Cape Town; Nobu is linked to the stub's canned Google place */
+const inCapeTown = (places: SeedPlace[]): Place[] =>
+  places.map((p) => ({
+    street: "",
+    city: "Cape Town",
+    province: "Western Cape",
+    country: "South Africa",
+    googlePlaceId: null,
+    location: null,
+    ...p,
+  }));
 
 export function seed(today = todayKey()): StubState {
   const d = (days: number) => addDays(today, days);
@@ -85,10 +85,10 @@ export function seed(today = todayKey()): StubState {
       { id: "e-6", title: "Weekend away", day: d(18), time: null, location: "Paternoster", attendees: [BRANDON.id, ADELE.id] },
       { id: "e-7", title: "Dentist", day: d(24), time: "09:15", location: null, attendees: [BRANDON.id] },
     ],
-    places: withGoogle([
+    places: inCapeTown([
       {
         id: "p-1", name: "Nobu", category: "Japanese", area: "Sea Point", status: "been", hue: "accent",
-        googleRating: 4.6, photoUrl: STUB_PHOTO,
+        googlePlaceId: "stub-nobu",
         mapsUrl: "https://www.google.com/maps/place/Nobu+Cape+Town",
         ratings: { [BRANDON.id]: 4.5, [ADELE.id]: 5 },
         visits: [
@@ -113,7 +113,7 @@ export function seed(today = todayKey()): StubState {
         visits: [{ id: "v-6", day: d(-12), title: "Brunch", note: null, rating: 4.2 }],
       },
       { id: "p-5", name: "Kloof Street House", category: "Restaurant", area: "Gardens", status: "want", hue: "accent", mapsUrl: null, ratings: {}, visits: [] },
-      { id: "p-6", name: "Paternoster beach walk", category: "Day trip", area: "West Coast", status: "want", hue: "partner", mapsUrl: null, ratings: {}, visits: [] },
+      { id: "p-6", name: "Paternoster beach walk", category: "Day trip", area: "West Coast", city: "Paternoster", status: "want", hue: "partner", mapsUrl: null, ratings: {}, visits: [] },
       { id: "p-7", name: "Zeitz MOCAA", category: "Museum", area: "Waterfront", status: "want", hue: "success", mapsUrl: null, ratings: {}, visits: [] },
       { id: "p-8", name: "Jason Bakery", category: "Bakery", area: "Bree Street", status: "want", hue: "warning", mapsUrl: null, ratings: {}, visits: [] },
     ]),
