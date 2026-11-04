@@ -30,6 +30,10 @@ docker run -p 3000:3000 -e USE_STUB_DATABASE=true together
 | `USE_STUB_DATABASE` | runtime | `false` in production |
 | `GOOGLE_MAPS_API_KEY` | runtime, optional | A Google Cloud API key with the **Places API (New)** enabled. Matches a place saved from a Maps link, and shows its Google rating, today's hours and photo. Server only, never sent to the browser. In the Cloud console, restrict it to the Places API (New) and to the server's outgoing IP. A key restricted to **websites** is refused, because server requests carry no referrer. Without it, places keep what the link says. |
 
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | runtime, optional | Chore reminders (Web Push). Make a key pair once with `pnpm dlx web-push generate-vapid-keys`; the subject is a `mailto:` address. Without them the Reminders card says reminders aren't set up. |
+| `CRON_SECRET` | runtime, optional | A long random string. The reminder job only runs for requests with `Authorization: Bearer <CRON_SECRET>`. |
+| `SUPABASE_SECRET_KEY` | runtime, optional | The service role key, for the reminder job only (`lib/supabase/admin.ts`). In the compose file it's `SERVICE_SUPABASESERVICE_KEY`. |
+
 `NEXT_PUBLIC_*` values are compiled into the browser bundle, so changing them means **rebuilding**, not just
 restarting. They're public by design. No secrets are needed at build time, and `.env*` files are excluded from the
 build context.
@@ -163,3 +167,20 @@ Each command prompts for the value, so it never lands in your shell history. The
 because that connects through the pooler over IPv4: GitHub runners can't reach the direct IPv6 address.
 `supabase/config.toml` targets Postgres 15 to match the Docker stack. Migrations written for 15 also run on a newer
 hosted project.
+
+## Chore reminders
+
+People turn reminders on from **You** (`/profile`). Each device's push subscription is saved in
+`push_subscriptions`. Once a day `GET /api/cron/chore-reminders` sends "due today" to every device whose owner has
+chores due or overdue in their Together's time zone, and forgets devices the push service says are gone.
+
+- **Vercel:** `vercel.json` schedules it at 05:00 UTC (07:00 in South Africa). Set `CRON_SECRET` in the project and
+  Vercel sends it with the request.
+- **Coolify:** add a Scheduled Task on the `together` service, `0 5 * * *`, running:
+
+  ```bash
+  wget -qO- --header "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/chore-reminders
+  ```
+
+On iPhone, push only works once Together is added to the Home Screen (Safari → Share → Add to Home Screen); the
+Reminders card says so.

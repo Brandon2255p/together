@@ -214,6 +214,53 @@ export interface GooglePlaceDetails {
   closesAt: string | null;
   /** a key-free image URL with the photographer's credit, which must be shown with it */
   photo: { url: string; credit: string | null; creditUrl: string | null } | null;
+  /** Google's price level, 0 (free) to 4 (very expensive); null when it doesn't say */
+  priceLevel?: number | null;
+}
+
+/** a Google Places Autocomplete prediction, shown while typing in "Add a place" */
+export interface PlaceSuggestion {
+  placeId: string;
+  /** "Kloof Street House" */
+  name: string;
+  /** "30 Kloof St, Gardens, Cape Town" */
+  secondary: string;
+  /** the parts of `name` that match what was typed, as [start, end) character offsets */
+  matches: [number, number][];
+  /** a street rather than a place you'd visit */
+  road: boolean;
+}
+
+/** what the Edit place screen changes. `google` moves the place to another Google place (Change place). */
+export interface PlaceChanges {
+  name: string;
+  category: string;
+  status: PlaceStatus;
+  street: string;
+  area: string;
+  city: string;
+  province: string;
+  country: string;
+  google?: { placeId: string; location: Coordinates | null };
+}
+
+/** a visit being logged; `rating` (1–5, whole stars) also becomes the person's own rating of the place */
+export interface NewVisit {
+  placeId: string;
+  day: DayKey;
+  title: string;
+  note: string | null;
+  rating: number | null;
+}
+
+export type PlaceSort = "top" | "recent" | "nearest" | "az";
+
+/** the Places list's filter (screen 20): "" means any */
+export interface PlaceFilter {
+  country: string;
+  province: string;
+  city: string;
+  sort: PlaceSort;
 }
 
 // ---- Wishlist -------------------------------------------------------------
@@ -243,6 +290,21 @@ export interface Goal {
 export type NewWish = Pick<WishItem, "name" | "price" | "url">;
 
 export type NewGoal = Pick<Goal, "title" | "target" | "ownerIds">;
+
+// ---- Reminders ------------------------------------------------------------
+
+/** a browser's or installed app's Web Push subscription (PushSubscription.toJSON()) */
+export interface PushSubscriptionKeys {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+/** one device to remind, and the chores due today or overdue for the person signed in on it */
+export interface ChoreReminder {
+  subscription: PushSubscriptionKeys;
+  titles: string[];
+}
 
 // ---- Results --------------------------------------------------------------
 

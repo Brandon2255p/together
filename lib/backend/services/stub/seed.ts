@@ -1,5 +1,15 @@
 import { addDays, todayKey } from "@/lib/format";
-import type { CalendarEvent, CatalogEntry, Chore, Goal, Member, Place, ShoppingItem, Together, WishItem } from "@/lib/models";
+import type {
+  CalendarEvent,
+  CatalogEntry,
+  Chore,
+  Goal,
+  Member,
+  Place,
+  ShoppingItem,
+  Together,
+  WishItem,
+} from "@/lib/models";
 
 // Seed data for the stub backend. Dates are relative to today so the app always looks lived-in.
 
@@ -19,22 +29,23 @@ export interface StubState {
   places: Place[];
   wishes: WishItem[];
   goals: Goal[];
+  /** devices that asked for reminders, and who's signed in on each */
   nextId: number;
 }
 
 type SeedPlace = Omit<Place, "street" | "city" | "province" | "country" | "googlePlaceId" | "location"> &
-  Partial<Pick<Place, "street" | "city" | "province" | "country" | "googlePlaceId">>;
+  Partial<Pick<Place, "street" | "city" | "province" | "country" | "googlePlaceId">> & { at?: [number, number] };
 
-/** the seed places are all in Cape Town; Nobu is linked to the stub's canned Google place */
+/** seed places are in Cape Town unless they say otherwise; Nobu is linked to the stub's canned Google place */
 const inCapeTown = (places: SeedPlace[]): Place[] =>
-  places.map((p) => ({
+  places.map(({ at, ...p }) => ({
     street: "",
     city: "Cape Town",
     province: "Western Cape",
     country: "South Africa",
     googlePlaceId: null,
-    location: null,
     ...p,
+    location: at ? { lat: at[0], lng: at[1], fetchedAt: new Date().toISOString() } : null,
   }));
 
 const hoursFromNow = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
@@ -98,7 +109,7 @@ export function seed(today = todayKey()): StubState {
     places: inCapeTown([
       {
         id: "p-1", name: "Nobu", category: "Japanese", area: "Sea Point", status: "been", hue: "accent",
-        googlePlaceId: "stub-nobu",
+        googlePlaceId: "stub-nobu", at: [-33.9075, 18.4167],
         mapsUrl: "https://www.google.com/maps/place/Nobu+Cape+Town",
         ratings: { [BRANDON.id]: 4.5, [ADELE.id]: 5 },
         visits: [
@@ -108,17 +119,17 @@ export function seed(today = todayKey()): StubState {
         ],
       },
       {
-        id: "p-2", name: "Truth Coffee", category: "Café", area: "CBD", status: "been", hue: "partner", mapsUrl: null,
+        id: "p-2", name: "Truth Coffee", category: "Café", area: "CBD", street: "36 Buitenkant St", status: "been", hue: "partner", mapsUrl: null,
         ratings: { [BRANDON.id]: 4.5, [ADELE.id]: 4.5 },
         visits: [{ id: "v-4", day: d(-3), title: "Saturday flat whites", note: null, rating: 4.5 }],
       },
       {
-        id: "p-3", name: "Lion's Head sunrise", category: "Hike", area: "Table Mountain", status: "been", hue: "success", mapsUrl: null,
+        id: "p-3", name: "Lion's Head sunrise", category: "Hike", area: "Tamboerskloof", street: "Signal Hill Rd", status: "been", hue: "success", mapsUrl: null,
         ratings: { [BRANDON.id]: 5, [ADELE.id]: 5 },
         visits: [{ id: "v-5", day: d(-40), title: "Full moon hike", note: "Bring headlamps next time.", rating: 5 }],
       },
       {
-        id: "p-4", name: "La Petite Tarte", category: "Bakery", area: "De Waterkant", status: "been", hue: "warning", mapsUrl: null,
+        id: "p-4", name: "La Petite Tarte", category: "Bakery", area: "De Waterkant", street: "4 Dixon St", status: "been", hue: "warning", mapsUrl: null,
         ratings: { [BRANDON.id]: 4, [ADELE.id]: 4.5 },
         visits: [{ id: "v-6", day: d(-12), title: "Brunch", note: null, rating: 4.2 }],
       },
@@ -126,6 +137,20 @@ export function seed(today = todayKey()): StubState {
       { id: "p-6", name: "Paternoster beach walk", category: "Day trip", area: "West Coast", city: "Paternoster", status: "want", hue: "partner", mapsUrl: null, ratings: {}, visits: [] },
       { id: "p-7", name: "Zeitz MOCAA", category: "Museum", area: "Waterfront", status: "want", hue: "success", mapsUrl: null, ratings: {}, visits: [] },
       { id: "p-8", name: "Jason Bakery", category: "Bakery", area: "Bree Street", status: "want", hue: "warning", mapsUrl: null, ratings: {}, visits: [] },
+      {
+        id: "p-9", name: "Delaire Graff", category: "Restaurant", area: "Helshoogte Pass", city: "Stellenbosch", status: "been", hue: "partner",
+        street: "R310 Helshoogte Rd", mapsUrl: null, at: [-33.9196, 18.9234],
+        ratings: { [BRANDON.id]: 5, [ADELE.id]: 4 },
+        visits: [{ id: "v-7", day: d(-60), title: "Long lunch", note: "Sit on the terrace.", rating: 5 }],
+      },
+      {
+        id: "p-10", name: "Le Lude", category: "Bar", area: "", city: "Franschhoek", status: "want", hue: "success",
+        street: "Lambrechts St", mapsUrl: null, ratings: {}, visits: [],
+      },
+      {
+        id: "p-11", name: "Pastéis de Belém", category: "Bakery", area: "Belém", city: "Lisbon", province: "Lisbon", country: "Portugal",
+        status: "want", hue: "accent", street: "R. de Belém 84", mapsUrl: null, ratings: {}, visits: [],
+      },
     ]),
     wishes: [
       { id: "w-1", ownerId: BRANDON.id, name: "Pour-over set", price: 650, url: null, claimedBy: ADELE.id, hue: "accent" },

@@ -1,5 +1,5 @@
 import "server-only";
-import type { GooglePlaceDetails, PlaceQuery } from "@/lib/models";
+import type { GooglePlaceDetails, PlaceQuery, PlaceSuggestion } from "@/lib/models";
 
 // Canned Google Places answers for the stub backend, so adding and showing places works offline and in CI.
 
@@ -15,7 +15,56 @@ const PHOTO =
 
 const capeTown = { city: "Cape Town", province: "Western Cape", country: "South Africa" };
 
+const kloof = (placeId: string, name: string, street: string, extra: Partial<GooglePlaceDetails> = {}): GooglePlaceDetails => ({
+  placeId,
+  name,
+  primaryType: "restaurant",
+  formattedAddress: `${street}, Gardens, Cape Town, 8001, South Africa`,
+  address: { street, area: "Gardens", ...capeTown },
+  location: { lat: -33.9311, lng: 18.4108 },
+  googleMapsUri: "https://maps.google.com/?cid=10",
+  rating: 4.3,
+  ratingCount: 250,
+  openNow: true,
+  closesAt: "21:00",
+  photo: null,
+  priceLevel: 2,
+  ...extra,
+});
+
 const PLACES: GooglePlaceDetails[] = [
+  kloof("stub-kloof-street-house", "Kloof Street House", "30 Kloof Street", {
+    rating: 4.5,
+    ratingCount: 4100,
+    closesAt: "23:00",
+    priceLevel: 3,
+    photo: { url: PHOTO, credit: "Thandi M.", creditUrl: null },
+  }),
+  kloof("stub-kloof-street-cafe", "Kloof Street Café", "2 Kloof Street", { primaryType: "cafe", priceLevel: 1 }),
+  kloof("stub-kloof-street-pharmacy", "Kloof Street Pharmacy", "88 Kloof Street", {
+    primaryType: "pharmacy",
+    address: { street: "88 Kloof Street", area: "Tamboerskloof", ...capeTown },
+    formattedAddress: "88 Kloof St, Tamboerskloof, Cape Town, 8001, South Africa",
+    priceLevel: null,
+  }),
+  kloof("stub-kloof-street", "Kloof Street", "Kloof Street", {
+    primaryType: "route",
+    formattedAddress: "Kloof St, Cape Town, South Africa",
+    address: { street: "Kloof Street", area: "", ...capeTown },
+    rating: null,
+    ratingCount: null,
+    openNow: null,
+    closesAt: null,
+    priceLevel: null,
+  }),
+  kloof("stub-truth-coffee", "Truth Coffee Roasting", "36 Buitenkant Street", {
+    primaryType: "coffee_shop",
+    address: { street: "36 Buitenkant Street", area: "CBD", ...capeTown },
+    formattedAddress: "36 Buitenkant St, Cape Town City Centre, Cape Town, 8000, South Africa",
+    location: { lat: -33.9278, lng: 18.4223 },
+    rating: 4.6,
+    priceLevel: 2,
+  }),
   {
     placeId: "stub-nobu",
     name: "Nobu",
@@ -29,6 +78,7 @@ const PLACES: GooglePlaceDetails[] = [
     openNow: true,
     closesAt: "22:00",
     photo: { url: PHOTO, credit: "Thandi M.", creditUrl: null },
+    priceLevel: 4,
   },
   {
     placeId: "stub-zeitz",
@@ -69,6 +119,21 @@ export function stubFindPlace(query: PlaceQuery): string {
   return match?.placeId ?? `stub-${[...asked].join("-") || "place"}`;
 }
 
+/** canned autocomplete: the places whose name contains what was typed, with the matched part marked */
+export function stubAutocomplete(input: string): PlaceSuggestion[] {
+  const typed = input.trim().toLowerCase();
+  if (!typed) return [];
+  return PLACES.flatMap((p) => {
+    const start = p.name.toLowerCase().indexOf(typed);
+    if (start < 0) return [];
+    const road = p.primaryType === "route";
+    const secondary = road
+      ? `Road · ${p.address.city}, ${p.address.country}`
+      : [p.address.street, p.address.area, p.address.city].filter(Boolean).join(", ");
+    return [{ placeId: p.placeId, name: p.name, secondary, matches: [[start, start + typed.length] as [number, number]], road }];
+  }).slice(0, 5);
+}
+
 export function stubGetPlace(placeId: string, extras: boolean): GooglePlaceDetails | null {
   const known = PLACES.find((p) => p.placeId === placeId);
   const place: GooglePlaceDetails = known ?? {
@@ -84,6 +149,7 @@ export function stubGetPlace(placeId: string, extras: boolean): GooglePlaceDetai
     openNow: null,
     closesAt: null,
     photo: null,
+    priceLevel: 2,
   };
-  return extras ? place : { ...place, rating: null, ratingCount: null, openNow: null, closesAt: null, photo: null };
+  return extras ? place : { ...place, rating: null, ratingCount: null, openNow: null, closesAt: null, photo: null, priceLevel: null };
 }

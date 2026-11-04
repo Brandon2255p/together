@@ -16,26 +16,22 @@ import type {
   NewEvent,
   NewGoal,
   NewPlace,
+  NewVisit,
   NewWish,
   Place,
+  PlaceChanges,
   PlaceQuery,
+  PushSubscriptionKeys,
   Together,
   TogetherSummary,
   WishItem,
 } from "@/lib/models";
-import { stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
-import { BRANDON, blankState, seedWorld, type StubState, type StubWorld } from "@/lib/backend/services/stub/seed";
+import { stubAutocomplete, stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
+import { BRANDON, blankState } from "@/lib/backend/services/stub/seed";
+import { state, world } from "@/lib/backend/services/stub/state";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis): every
 // Together it knows, and which one is open. state() is the open Together's data.
-const g = globalThis as unknown as { __togetherStubWorld?: StubWorld };
-const world = (): StubWorld => (g.__togetherStubWorld ??= seedWorld());
-const NONE = blankState(null);
-const state = (): StubState => {
-  const w = world();
-  return (w.currentId && w.togethers[w.currentId]) || NONE;
-};
-
 const LATENCY_MS = 120;
 const wait = () => new Promise((r) => setTimeout(r, LATENCY_MS));
 
@@ -117,11 +113,27 @@ export class StubServerService implements ServerBackendService {
   async setMyName({ name }: { name: string }) {
     await wait();
     log("setMyName", { name });
-    const t = state().together;
-    const me = t?.members.find((m) => m.id === t.meId);
-    if (!me) return { success: false, error: "You're not in a Together yet." };
-    me.name = name;
-    me.initial = name.charAt(0).toUpperCase();
+    // a name is a person's, so it changes in every Together they're in (or were)
+    const mineAnywhere = Object.values(world().togethers).flatMap((t) => [...(t.together?.members ?? []), ...(t.together?.formerMembers ?? [])]);
+    const me = mineAnywhere.filter((m) => m.id === ME);
+    if (!me.length) return { success: false, error: "You're not in a Together yet." };
+    for (const m of me) Object.assign(m, { name, initial: name.charAt(0).toUpperCase() });
+    return done;
+  }
+
+  async savePushSubscription(subscription: PushSubscriptionKeys) {
+    await wait();
+    log("savePushSubscription", { endpoint: subscription.endpoint.slice(0, 40) });
+    const w = world();
+    w.pushSubscriptions = [...w.pushSubscriptions.filter((p) => p.endpoint !== subscription.endpoint), { ...subscription, memberId: ME }];
+    return done;
+  }
+
+  async deletePushSubscription({ endpoint }: { endpoint: string }) {
+    await wait();
+    log("deletePushSubscription");
+    const w = world();
+    w.pushSubscriptions = w.pushSubscriptions.filter((p) => p.endpoint !== endpoint);
     return done;
   }
 
@@ -359,7 +371,7 @@ export class StubServerService implements ServerBackendService {
       id: id("p"),
       name: place.name,
       category: place.category ?? "Saved place",
-      area: place.area || (place.mapsUrl ? "From Google Maps" : "Added by hand"),
+      area: place.area,
       street: place.street,
       city: place.city,
       province: place.province,
@@ -382,6 +394,62 @@ export class StubServerService implements ServerBackendService {
     const place = state().places.find((p) => p.id === placeId);
     if (place) place.location = { ...location, fetchedAt: new Date().toISOString() };
     return place ? done : { success: false, error: "We couldn't find that place." };
+  }
+
+  async updatePlace({ id: placeId, google, ...changes }: { id: string } & PlaceChanges) {
+    await wait();
+    log("updatePlace", { id: placeId, google, ...changes });
+    const s = state();
+    const place = s.places.find((p) => p.id === placeId);
+    if (!place) return fail<Place>("We couldn't find that place.");
+    if (google && s.places.some((p) => p.id !== placeId && p.googlePlaceId === google.placeId)) {
+      return fail<Place>("That place is already in your list.");
+    }
+    Object.assign(place, changes);
+    if (google) {
+      place.googlePlaceId = google.placeId;
+      place.location = google.location ? { ...google.location, fetchedAt: new Date().toISOString() } : null;
+      place.street = "";
+    }
+    return ok(place);
+  }
+
+  async unlinkPlace({ id: placeId }: { id: string }) {
+    await wait();
+    log("unlinkPlace", { id: placeId });
+    const place = state().places.find((p) => p.id === placeId);
+    if (!place) return { success: false, error: "We couldn't find that place." };
+    place.googlePlaceId = null;
+    place.location = null;
+    return done;
+  }
+
+  async deletePlace({ id: placeId }: { id: string }) {
+    await wait();
+    log("deletePlace", { id: placeId });
+    const s = state();
+    s.places = s.places.filter((p) => p.id !== placeId);
+    return done;
+  }
+
+  async logVisit(visit: NewVisit) {
+    await wait();
+    log("logVisit", visit);
+    const s = state();
+    const place = s.places.find((p) => p.id === visit.placeId);
+    if (!place) return fail<Place>("We couldn't find that place.");
+    place.visits.unshift({ id: id("v"), day: visit.day, title: visit.title, note: visit.note, rating: visit.rating });
+    place.visits.sort((a, b) => b.day.localeCompare(a.day));
+    place.status = "been";
+    const me = s.together?.meId ?? BRANDON.id;
+    if (visit.rating !== null) place.ratings[me] = visit.rating;
+    return ok(place);
+  }
+
+  async autocompletePlaces({ input, sessionToken, near }: { input: string; sessionToken: string; near: Coordinates | null }) {
+    await wait();
+    log("autocompletePlaces", { input, sessionToken, near });
+    return stubAutocomplete(input);
   }
 
   /** no Google here: canned places (Nobu, Zeitz, Woodlands), or a made-up one for any other link */

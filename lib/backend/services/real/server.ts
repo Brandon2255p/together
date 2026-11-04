@@ -26,14 +26,18 @@ import type {
   NewWish,
   Place,
   PlaceQuery,
+  PushSubscriptionKeys,
   PlaceStatus,
+  NewVisit,
+  PlaceChanges,
+  PlaceSuggestion,
   ShoppingItem,
   Together,
   TogetherSummary,
   WishItem,
 } from "@/lib/models";
 import { createClient } from "@/lib/supabase/server";
-import { findPlaceId, getPlace as getGooglePlaceDetails } from "@/lib/google/places";
+import { autocomplete, findPlaceId, getPlace as getGooglePlaceDetails } from "@/lib/google/places";
 
 // The Supabase implementation. Every call runs as the signed-in user, so row-level security (supabase/schemas) decides
 // what they see: queries never filter by Together themselves. Writes that need more than one table's rules go through
@@ -328,6 +332,18 @@ export class RealServerService implements ServerBackendService {
     return error ? notSaved(message(error, "We couldn't change your name. Try again.")) : saved;
   }
 
+  async savePushSubscription({ endpoint, p256dh, auth }: PushSubscriptionKeys): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.rpc("v1_save_push_subscription", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth });
+    return error ? notSaved(message(error, "We couldn't turn reminders on. Try again.")) : saved;
+  }
+
+  async deletePushSubscription({ endpoint }: { endpoint: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
+    return error ? notSaved(message(error, "We couldn't turn reminders off. Try again.")) : saved;
+  }
+
   async joinTogether({ code }: { code: string }): Promise<DataResult<Together>> {
     const sb = await createClient();
     const { error } = await sb.rpc("v2_join_together", { p_code: code });
@@ -589,7 +605,7 @@ export class RealServerService implements ServerBackendService {
       .insert({
         name: place.name,
         category: place.category ?? "Saved place",
-        area: place.area || (place.mapsUrl ? "From Google Maps" : "Added by hand"),
+        area: place.area,
         street: place.street,
         city: place.city,
         province: place.province,
@@ -627,6 +643,67 @@ export class RealServerService implements ServerBackendService {
       .eq("id", id);
     if (error) return notSaved(message(error, "We couldn't update that place."));
     return saved;
+  }
+
+  async updatePlace({ id, google, ...changes }: { id: string } & PlaceChanges): Promise<DataResult<Place>> {
+    const sb = await createClient();
+    const { data, error } = await sb
+      .from("places")
+      .update({
+        ...changes,
+        ...(google
+          ? {
+              google_place_id: google.placeId,
+              lat: google.location?.lat ?? null,
+              lng: google.location?.lng ?? null,
+              location_fetched_at: google.location ? new Date().toISOString() : null,
+              // a Google place's street is fetched fresh, not stored
+              street: "",
+            }
+          : {}),
+      })
+      .eq("id", id)
+      .select(PLACE_SELECT)
+      .maybeSingle()
+      .overrideTypes<PlaceRow | null, { merge: false }>();
+    if (error?.code === "23505") return fail("That place is already in your list.");
+    if (error) return fail(message(error, "We couldn't save your changes. Try again."));
+    return data ? ok(toPlace(data)) : fail("We couldn't find that place.");
+  }
+
+  async unlinkPlace({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb
+      .from("places")
+      .update({ google_place_id: null, lat: null, lng: null, location_fetched_at: null })
+      .eq("id", id);
+    if (error) return notSaved(message(error, "We couldn't unlink that place."));
+    return saved;
+  }
+
+  async deletePlace({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("places").delete().eq("id", id);
+    if (error) return notSaved(message(error, "We couldn't delete that place."));
+    return saved;
+  }
+
+  async logVisit({ placeId, day, title, note, rating }: NewVisit): Promise<DataResult<Place>> {
+    const sb = await createClient();
+    // the insert trigger (mark_place_visited) moves the place to Been
+    const visit = await sb.from("visits").insert({ place_id: placeId, day, title, note, rating });
+    if (visit.error) return fail(message(visit.error, "We couldn't save that visit. Try again."));
+    if (rating !== null) {
+      const own = await sb
+        .from("place_ratings")
+        .upsert({ place_id: placeId, rating, updated_at: new Date().toISOString() }, { onConflict: "place_id,profile_id" });
+      if (own.error) console.error("[supabase] visit saved, rating not", own.error.code, own.error.message);
+    }
+    return this.getPlace({ id: placeId });
+  }
+
+  async autocompletePlaces(params: { input: string; sessionToken: string; near: Coordinates | null }): Promise<PlaceSuggestion[]> {
+    return autocomplete(params.input, params.sessionToken, params.near);
   }
 
   async findPlaceFromLink(query: PlaceQuery): Promise<string | null> {

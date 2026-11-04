@@ -13,8 +13,18 @@ const TABS: TabBarItem<AppTab>[] = [
   { key: "wishlist", label: "Wishlist", href: "/wishlist", icon: <GiftIcon aria-hidden /> },
 ];
 
-/** The phone-width column with the floating tab bar. Mobile first: wider screens just centre the column. */
-export function AppShell({ active, children }: { active: AppTab | null; children: React.ReactNode }) {
+/**
+ * The phone-width column with the floating tab bar. Mobile first: wider screens just centre the column.
+ * `tabBar` false leaves it off, for full-screen forms (Add place, Edit place).
+ */
+export function AppShell({ active, tabBar = true, children }: { active: AppTab | null; tabBar?: boolean; children: React.ReactNode }) {
+  if (!tabBar) {
+    return (
+      <div className="mx-auto min-h-dvh max-w-[440px] px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="mx-auto min-h-dvh max-w-[440px]">
       <div className="px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-36">{children}</div>

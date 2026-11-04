@@ -1,5 +1,5 @@
 import "server-only";
-import type { GooglePlaceDetails, PlaceQuery } from "@/lib/models";
+import type { Coordinates, GooglePlaceDetails, PlaceQuery, PlaceSuggestion } from "@/lib/models";
 import { addressFromComponents, closingTime, type AddressComponent } from "@/lib/places/google-types";
 
 /**
@@ -30,7 +30,19 @@ const SHOW_FIELDS = [
   "currentOpeningHours.nextCloseTime",
   "utcOffsetMinutes",
   "photos",
+  "priceLevel",
 ];
+
+/** how far around the bias point autocomplete prefers places, in metres (Google's maximum) */
+const BIAS_RADIUS_M = 50_000;
+
+const PRICE_LEVELS: Record<string, number> = {
+  PRICE_LEVEL_FREE: 0,
+  PRICE_LEVEL_INEXPENSIVE: 1,
+  PRICE_LEVEL_MODERATE: 2,
+  PRICE_LEVEL_EXPENSIVE: 3,
+  PRICE_LEVEL_VERY_EXPENSIVE: 4,
+};
 
 interface PlaceResponse {
   id: string;
@@ -45,6 +57,23 @@ interface PlaceResponse {
   currentOpeningHours?: { openNow?: boolean; nextCloseTime?: string };
   utcOffsetMinutes?: number;
   photos?: { name?: string; authorAttributions?: { displayName?: string; uri?: string }[] }[];
+  priceLevel?: string;
+}
+
+interface FormattableText {
+  text?: string;
+  matches?: { startOffset?: number; endOffset?: number }[];
+}
+
+interface AutocompleteResponse {
+  suggestions?: {
+    placePrediction?: {
+      placeId?: string;
+      types?: string[];
+      text?: FormattableText;
+      structuredFormat?: { mainText?: FormattableText; secondaryText?: FormattableText };
+    };
+  }[];
 }
 
 const apiKey = () => process.env.GOOGLE_MAPS_API_KEY || null;
@@ -94,6 +123,36 @@ export async function findPlaceId(query: PlaceQuery): Promise<string | null> {
   return result?.places?.[0]?.id ?? null;
 }
 
+/**
+ * Place Autocomplete (New). Free when the session (`sessionToken`, from the first keystroke) ends in a Place Details
+ * call with the same token. Biased to `near` when we know where the Together usually goes.
+ */
+export async function autocomplete(input: string, sessionToken: string, near: Coordinates | null): Promise<PlaceSuggestion[]> {
+  const bias = near
+    ? { locationBias: { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: BIAS_RADIUS_M } } }
+    : {};
+  const result = await call<AutocompleteResponse>("places:autocomplete", {
+    method: "POST",
+    body: JSON.stringify({ input, sessionToken, languageCode: "en", ...bias }),
+  });
+  return (result?.suggestions ?? []).flatMap(({ placePrediction: p }) => {
+    if (!p?.placeId) return [];
+    const main = p.structuredFormat?.mainText ?? p.text;
+    const name = main?.text ?? "";
+    if (!name) return [];
+    const matches = (main?.matches ?? []).map((m): [number, number] => [m.startOffset ?? 0, m.endOffset ?? 0]);
+    return [
+      {
+        placeId: p.placeId,
+        name,
+        secondary: p.structuredFormat?.secondaryText?.text ?? "",
+        matches: matches.filter(([start, end]) => end > start),
+        road: p.types?.includes("route") ?? false,
+      },
+    ];
+  });
+}
+
 const cache = new Map<string, { at: number; value: GooglePlaceDetails }>();
 
 /**
@@ -134,6 +193,7 @@ export async function getPlace(
       ? closingTime(place.currentOpeningHours.nextCloseTime, place.utcOffsetMinutes)
       : null,
     photo: photoUrl ? { url: photoUrl, credit: credit?.displayName ?? null, creditUrl: credit?.uri ?? null } : null,
+    priceLevel: place.priceLevel ? (PRICE_LEVELS[place.priceLevel] ?? null) : null,
   };
   cache.set(cacheKey, { at: Date.now(), value });
   return value;

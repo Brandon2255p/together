@@ -13,7 +13,7 @@ const migration = files.map((f) => `-- ${f}\n${readFileSync(join(supabaseDir, f)
 const db = new PGlite();
 
 await db.exec(`
-  create role anon nologin; create role authenticated nologin;
+  create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
   create schema auth;
   create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
   create function auth.uid() returns uuid language sql stable as
@@ -140,6 +140,20 @@ await fails("one row per Google place per Together", "adele", "insert into publi
 check("another Together can save the same Google place", (await one("eve", "insert into public.places (name, google_place_id) values ('Zeitz', 'ChIJ3dD0bFlnzB0R') returning id")).id !== undefined);
 await fails("coordinates come with the time they were fetched", "brandon", "insert into public.places (name, lat, lng) values ('x', -33.9, 18.4)", [], /check constraint/);
 await fails("a Google place id is just an id", "brandon", "insert into public.places (name, google_place_id) values ('x', 'https://evil.example')", [], /check constraint/);
+// logVisit: a visit's rating upserts the person's own rating
+const upsertRating = "insert into public.place_ratings (place_id, rating, updated_at) values ($1, $2, now()) on conflict (place_id, profile_id) do update set rating = excluded.rating, updated_at = excluded.updated_at";
+await as("brandon", upsertRating, [place, 3]);
+await as("adele", upsertRating, [place, 4]);
+const ratings = (await as("brandon", "select profile_id, rating from public.place_ratings where place_id = $1 order by rating", [place])).rows;
+check("logging a visit updates your own rating, not theirs", ratings.length === 2 && ratings[0].rating === 3 && ratings[1].rating === 4);
+// unlinkPlace: the id and coordinates go together
+const zeitz = (await one("brandon", "select id from public.places where google_place_id = 'ChIJ3dD0bFlnzB0R'")).id;
+await as("brandon", "update public.places set google_place_id = null, lat = null, lng = null, location_fetched_at = null where id = $1", [zeitz]);
+check("unlinking forgets the Google place and its coordinates", (await one("adele", "select google_place_id, lat from public.places where id = $1", [zeitz])).lat === null);
+// deletePlace: either member, and the visits and ratings go with it
+await as("adele", "delete from public.places where id = $1", [place]);
+check("deleting a place removes its visits and ratings", (await one("brandon", "select (select count(*) from public.visits where place_id = $1)::int + (select count(*) from public.place_ratings where place_id = $1)::int n", [place])).n === 0);
+check("Eve's places are untouched", (await one("eve", "select count(*)::int n from public.places")).n === 1);
 
 // wishlist
 const wish = (await one("adele", "insert into public.wishes (name, price_cents) values ('Ceramic vase', 85000) returning id")).id;
@@ -259,6 +273,42 @@ await db.exec("set role anon");
 try { await db.query("select public.v1_create_together('x')"); check("anon can't call v1_create_together", false); }
 catch (e) { check("anon can't call v1_create_together", /permission denied/.test(e.message), e.message); }
 finally { await db.exec("reset role"); }
+
+
+// push reminders
+const sub = (n) => [`https://push.example.com/${n}`, "p256dh-key", "auth-secret"];
+await as("brandon", "select public.v1_save_push_subscription($1, $2, $3)", sub("phone"));
+check("you see your own push subscription", (await rows("brandon", "select * from public.push_subscriptions")).length === 1);
+check("others don't see it", (await rows("adele", "select * from public.push_subscriptions")).length === 0);
+await fails("can't add a subscription for someone else", "adele", "insert into public.push_subscriptions (endpoint, profile_id, p256dh, auth) values ('https://push.example.com/x', $1, 'k', 'a')", [U.brandon], /row-level security|permission denied/);
+await as("adele", "select public.v1_save_push_subscription($1, $2, $3)", sub("phone"));
+check(
+  "a device that changes hands moves to its new owner",
+  (await rows("brandon", "select * from public.push_subscriptions")).length === 0 && (await rows("adele", "select * from public.push_subscriptions")).length === 1,
+);
+await fails("signed-in people can't read everyone's reminders", "adele", "select * from public.v2_chore_reminders()", [], /permission denied/);
+await as("brandon", "select public.v1_save_push_subscription($1, $2, $3)", sub("laptop"));
+const { id: overdue } = await one("brandon", "insert into public.chores (title, due) values ('Water the plants', current_date - 1) returning id");
+await as("brandon", "insert into public.chore_assignees (chore_id, profile_id) values ($1, auth.uid())", [overdue]);
+await db.exec("set role service_role");
+const reminders = (await db.query("select * from public.v2_chore_reminders()")).rows;
+await db.exec("reset role");
+check("reminders list overdue chores for the assignee's devices", reminders.find((r) => r.endpoint.endsWith("/laptop"))?.titles.includes("Water the plants"), JSON.stringify(reminders));
+check("no reminder for chores you're not on", !reminders.some((r) => r.endpoint.endsWith("/phone") && r.titles.includes("Water the plants")));
+
+// reminders follow people across Togethers, but not into ones they've left
+const { id: adeleChore } = await one("brandon", "insert into public.chores (title, due) values ('Fix the gate', current_date - 1) returning id");
+await as("brandon", "insert into public.chore_assignees (chore_id, profile_id) values ($1, $2)", [adeleChore, U.adele]);
+const adeleTitles = async () => {
+  await db.exec("set role service_role");
+  const r = (await db.query("select * from public.v2_chore_reminders()")).rows;
+  await db.exec("reset role");
+  return r.find((x) => x.endpoint.endsWith("/phone"))?.titles ?? [];
+};
+await as("adele", "select public.v1_switch_together($1)", [(await one("brandon", "select public.my_together_id() id")).id]);
+check("reminders cover a Together you're in", (await adeleTitles()).includes("Fix the gate"));
+await as("adele", "select public.v1_leave_together()");
+check("…but not one you've left", !(await adeleTitles()).includes("Fix the gate"));
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);

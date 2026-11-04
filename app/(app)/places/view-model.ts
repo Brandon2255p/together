@@ -3,110 +3,127 @@
 import { useState } from "react";
 import type { Route } from "next";
 import type { PlaceCardData } from "@/components/places/places-screen";
-import { addPlace } from "@/lib/actions/places";
-import type { Hue, Place, PlaceStatus } from "@/lib/models";
-import { TEMP, type Optimistic } from "../_lib/optimistic";
-import { useServerState } from "../_lib/server-state";
-import { isShortMapsLink, placeFromMapsUrl, readPlaceInput } from "@/lib/places/maps-link";
+import type { AreaLevel } from "@/components/places/place-filter-sheet";
+import type { Coordinates, Place, PlaceFilter, PlaceSort, PlaceStatus } from "@/lib/models";
+import {
+  applyFilter,
+  averageRating,
+  filterLabel,
+  filterOptions,
+  groupByArea,
+  isFiltered,
+  narrowFilter,
+  NO_FILTER,
+  SORT_LABELS,
+  sortPlaces,
+  withParents,
+} from "@/lib/places/address";
 
 export interface PlacesViewData {
   tab: PlaceStatus;
   places: Place[];
 }
 
-/** the average of everyone's ratings, or null when nobody has rated it */
-export function averageRating(place: Place): number | null {
-  const values = Object.values(place.ratings).filter((v): v is number => typeof v === "number");
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+/** "Japanese · 21 Beach Rd, Sea Point": a Google place's street isn't stored, so it shows the suburb */
+function subtitle(p: Place): string {
+  const where = [p.street, p.area].map((s) => s.trim()).filter(Boolean).join(", ");
+  return [p.category, where].filter(Boolean).join(" · ");
 }
 
-/** what we can show before the server answers: the name we can read locally, or a placeholder while a short link is followed */
-function optimisticName(input: string): string {
-  const parsed = readPlaceInput(input);
-  if (!parsed) return input.trim();
-  if (parsed.kind === "name") return parsed.name;
-  if (parsed.label) return parsed.label;
-  return isShortMapsLink(parsed.url) ? "Looking it up…" : placeFromMapsUrl(parsed.url, parsed.url, null).name;
-}
-
-function toCard(p: Optimistic<Place>): PlaceCardData {
+function toCard(p: Place): PlaceCardData {
   return {
     id: p.id,
-    key: p.clientKey ?? p.id,
     name: p.name,
-    subtitle: `${p.category} · ${p.area}`,
+    subtitle: subtitle(p),
     hue: p.hue,
     rating: averageRating(p),
-    badge: p.status === "been" ? `Visited ${p.visits.length}×` : null,
+    badge: p.status === "been" && p.visits.length ? `Visited ${p.visits.length}×` : null,
     href: `/places/${p.id}` as Route,
-    pending: p.id.startsWith(TEMP),
   };
 }
 
-const HUES: Hue[] = ["accent", "partner", "success", "warning"];
+const SORTS: PlaceSort[] = ["top", "recent", "nearest", "az"];
+
+/** the device's location, asked for only when someone sorts by Nearest */
+function locate(): Promise<Coordinates | null> {
+  if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
+  return new Promise((resolve) =>
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+      () => resolve(null),
+      { maximumAge: 10 * 60 * 1000, timeout: 10_000 },
+    ),
+  );
+}
 
 export function usePlacesViewModel(data: PlacesViewData) {
+  const { places } = data;
   const [tab, setTab] = useState<PlaceStatus>(data.tab);
-  const [places, setPlaces] = useServerState<Optimistic<Place>[]>(data.places);
-  const [input, setInput] = useState("");
+  const [filter, setFilter] = useState<PlaceFilter>(NO_FILTER);
+  const [draft, setDraft] = useState<PlaceFilter>(NO_FILTER);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [here, setHere] = useState<Coordinates | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  /** optimistic: a placeholder card appears straight away while the server reads the Maps link and saves it */
-  async function onAdd() {
-    const text = input.trim();
-    if (!text) return;
-    if (!readPlaceInput(text)) return setError("Paste a Google Maps link or type the place's name.");
-    const tempId = `${TEMP}${Date.now()}`;
-    const placeholder: Place = {
-      id: tempId,
-      name: optimisticName(text),
-      category: "Saving",
-      area: "Reading the link…",
-      mapsUrl: null,
-      status: tab,
-      ratings: {},
-      visits: [],
-      hue: HUES[places.length % HUES.length] ?? "accent",
-      street: "",
-      city: "",
-      province: "",
-      country: "",
-      googlePlaceId: null,
-      location: null,
-    };
+  const onTab = places.filter((p) => p.status === tab);
+  const groups = groupByArea(sortPlaces(applyFilter(onTab, filter), filter.sort, here)).map((g) => ({
+    label: g.label,
+    places: g.places.map(toCard),
+  }));
+
+  // the sheet counts the places on this tab (Been or Want to go), like the list it filters
+  const options = filterOptions(onTab, draft);
+
+  function openSheet() {
+    setDraft(filter);
+    setSheetOpen(true);
+  }
+
+  async function apply() {
+    setSheetOpen(false);
     setError(null);
-    setInput("");
-    setPlaces((ps) => [placeholder, ...ps]);
-    const result = await addPlace(text, tab);
-    if (!result.data) {
-      setPlaces((ps) => ps.filter((p) => p.id !== tempId));
-      setInput(text);
-      return setError(result.error ?? "Couldn't save that place.");
+    setFilter(draft);
+    if (draft.sort === "nearest" && !here) {
+      const position = await locate();
+      if (position) setHere(position);
+      else setError("We couldn't get your location, so places are A to Z. Allow location to sort by distance.");
     }
-    const added = result.data;
-    // a Google place that's already saved comes back as the existing one: drop the placeholder instead of doubling it
-    setPlaces((ps) =>
-      ps.some((p) => p.id === added.id)
-        ? ps.filter((p) => p.id !== tempId)
-        : ps.map((p) => (p.id === tempId ? { ...added, clientKey: tempId } : p)),
-    );
   }
 
   return {
-    tab,
-    onTabChange: setTab,
-    counts: {
-      been: places.filter((p) => p.status === "been").length,
-      want: places.filter((p) => p.status === "want").length,
+    screen: {
+      tab,
+      onTabChange: setTab,
+      counts: {
+        been: places.filter((p) => p.status === "been").length,
+        want: places.filter((p) => p.status === "want").length,
+      },
+      addHref: `/places/new?tab=${tab}` as Route,
+      filterChip: filterLabel(filter),
+      onClearFilter: () => setFilter((f) => ({ ...NO_FILTER, sort: f.sort })),
+      sortLabel: SORT_LABELS[filter.sort],
+      onOpenFilters: openSheet,
+      groups,
+      filteredOut: groups.length === 0 && onTab.length > 0 && isFiltered(filter),
+      error,
     },
-    input,
-    onInputChange: (v: string) => {
-      setInput(v);
-      setError(null);
+    sheet: {
+      open: sheetOpen,
+      onOpenChange: setSheetOpen,
+      options: { country: options.countries, province: options.provinces, city: options.cities },
+      selected: { country: draft.country, province: draft.province, city: draft.city },
+      onSelect: (level: AreaLevel, value: string) =>
+        setDraft((d) => narrowFilter(onTab, withParents(onTab, { ...d, [level]: d[level] === value ? "" : value }))),
+      sort: draft.sort,
+      sorts: SORTS.map((value) => ({
+        value,
+        label: SORT_LABELS[value],
+        hint: value === "nearest" ? "Uses your location, only on this phone" : undefined,
+      })),
+      onSortChange: (sort: PlaceSort) => setDraft((d) => ({ ...d, sort })),
+      onClear: () => setDraft(NO_FILTER),
+      onApply: () => void apply(),
+      matching: applyFilter(onTab, draft).length,
     },
-    onAdd: () => void onAdd(),
-    adding: false,
-    places: places.filter((p) => p.status === tab).map(toCard),
-    error,
   };
 }

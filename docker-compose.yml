@@ -157,6 +157,12 @@ services:
       - 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${SERVICE_SUPABASEANON_KEY}'
       # optional: Google Places (matching Maps links; rating, hours and photo on a place)
       - 'GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}'
+      # optional: chore reminders (Web Push). The daily job is a Coolify scheduled task, see docs/deploy.md
+      - 'VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}'
+      - 'VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}'
+      - 'VAPID_SUBJECT=${VAPID_SUBJECT:-}'
+      - 'CRON_SECRET=${CRON_SECRET:-}'
+      - 'SUPABASE_SECRET_KEY=${SERVICE_SUPABASESERVICE_KEY}'
   supabase-kong:
     image: 'kong/kong:3.9.1'
     entrypoint: /home/kong/kong-entrypoint.sh
