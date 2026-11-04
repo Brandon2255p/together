@@ -109,18 +109,32 @@ Steps:
 
 ### Applying the schema
 
-Migrations are generated from `supabase/schemas` (see [database.md](database.md)). Push them to the self-hosted
-database over a direct Postgres connection:
+Migrations are generated from `supabase/schemas` (see [database.md](database.md)). On every deploy, the
+`supabase-migrate` service applies any new ones:
+
+- **How it runs:** it's built from [`supabase/migrate`](../supabase/migrate) on the database's own image. It waits for
+  Postgres and Auth, then applies each new file in `supabase/migrations` in its own transaction.
+- **What it records:** each applied migration goes in `supabase_migrations.schema_migrations`, the same table
+  `supabase db push` uses, so the two can be mixed.
+- **Then it idles,** because Coolify reads an exited container as a crash. It's healthy once the database is up to
+  date, and `together` waits for that.
+- **If a migration fails,** nothing from that migration is applied. The container goes unhealthy after about 5 minutes
+  and the deploy fails. Check its logs, fix the schema, generate a new migration and redeploy.
+
+The production database runs **Postgres 15** (`supabase/postgres:15.8.1.085`), so `supabase/config.toml` sets
+`major_version = 15`. Migrations generated against a newer version can contain grants that 15 rejects, such as
+`MAINTAIN` from 17. CI applies every migration to the production image to catch that.
+
+You can still push by hand over a direct connection, from the server or through an SSH tunnel. Postgres isn't exposed
+publicly.
 
 ```bash
 supabase db push --db-url "postgresql://postgres:<SERVICE_PASSWORD_POSTGRES>@<db-host>:5432/postgres"
 ```
-
-Postgres isn't exposed publicly by this compose file. Run the command from the server, or through an SSH tunnel.
 
 ## CI
 
 | Workflow | Runs |
 |---|---|
 | [`ci.yml`](../.github/workflows/ci.yml) | lint + typecheck, then unit tests + database tests |
-| [`docker.yml`](../.github/workflows/docker.yml) | Test-builds the image with layer caching (never pushes), runs it in stub mode, waits for the health check, and requests `/api/health`, `/sign-in`, `/home` and `/design-system`. Also validates `docker-compose.yml`. |
+| [`docker.yml`](../.github/workflows/docker.yml) | Test-builds the image with layer caching (never pushes), runs it in stub mode, waits for the health check, and requests `/api/health`, `/sign-in`, `/home` and `/design-system`. Applies every migration to the production Postgres image with the `supabase-migrate` container. Also validates `docker-compose.yml`. |

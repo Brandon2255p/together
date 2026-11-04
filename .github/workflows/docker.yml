@@ -60,6 +60,38 @@ jobs:
         if: always()
         run: docker logs together || true
 
+  migrate:
+    name: Migrations apply to Supabase Postgres
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start Supabase Postgres (same image as production)
+        run: |
+          docker network create mig
+          docker run -d --name db --network mig -e POSTGRES_PASSWORD=ci \
+            supabase/postgres:15.8.1.085 postgres -c config_file=/etc/postgresql/postgresql.conf
+          for i in $(seq 1 60); do docker exec db pg_isready -U postgres -h 127.0.0.1 -q && break; sleep 2; done
+          sleep 5
+      - name: Build and run the migrate image
+        run: |
+          docker build -t together-migrate -f supabase/migrate/Dockerfile supabase
+          docker run -d --name migrate --network mig -e PGHOST=db -e PGUSER=postgres -e PGPASSWORD=ci \
+            -e PGDATABASE=postgres together-migrate
+      - name: Wait until migrated (and still running)
+        run: |
+          for i in $(seq 1 60); do docker exec migrate test -f /tmp/migrated && break; sleep 2; done
+          docker exec migrate test -f /tmp/migrated
+          test "$(docker inspect -f '{{.State.Running}}' migrate)" = true
+      - name: Restart applies nothing twice
+        run: |
+          docker restart migrate
+          for i in $(seq 1 30); do docker exec migrate test -f /tmp/migrated && break; sleep 2; done
+          docker exec migrate test -f /tmp/migrated
+          test "$(docker exec db psql -U postgres -h 127.0.0.1 -tAc 'select count(*) from supabase_migrations.schema_migrations')" = "$(ls supabase/migrations/*.sql | wc -l)"
+      - name: Logs
+        if: always()
+        run: docker logs migrate || true
+
   compose:
     name: Validate docker-compose.yml
     runs-on: ubuntu-latest
