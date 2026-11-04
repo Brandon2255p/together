@@ -12,8 +12,11 @@ import type {
   Goal,
   GooglePlaceDetails,
   Hue,
+  InviteCode,
+  InvitePreview,
   Member,
   MemberId,
+  MemberRole,
   MemberTone,
   MutationResult,
   NewChore,
@@ -30,6 +33,7 @@ import type {
   PlaceSuggestion,
   ShoppingItem,
   Together,
+  TogetherSummary,
   WishItem,
 } from "@/lib/models";
 import { createClient } from "@/lib/supabase/server";
@@ -44,13 +48,41 @@ import { autocomplete, findPlaceId, getPlace as getGooglePlaceDetails } from "@/
 interface MemberRow {
   profile_id: string;
   tone: MemberTone;
+  role: MemberRole;
+  joined_at: string;
+  left_at: string | null;
   profiles: { name: string } | null;
 }
 interface TogetherRow {
   id: string;
   name: string;
   invite_code: string;
+  invite_expires_at: string;
   together_members: MemberRow[];
+}
+/** a member as v1_list_my_togethers and v1_invite_preview send them */
+interface MemberJson {
+  id: string;
+  name: string;
+  tone: MemberTone;
+}
+interface TogetherSummaryRow {
+  id: string;
+  name: string;
+  member_count: number;
+  members: MemberJson[];
+  tone: MemberTone;
+  role: MemberRole;
+  is_current: boolean;
+  last_activity_at: string;
+  has_news: boolean;
+}
+interface InvitePreviewRow {
+  id: string;
+  name: string;
+  members: MemberJson[];
+  expired: boolean;
+  already_member: boolean;
 }
 interface ShoppingRow {
   id: string;
@@ -120,24 +152,48 @@ interface GoalRow {
   goal_owners: { profile_id: string }[];
 }
 
-const TOGETHER_SELECT = "id, name, invite_code, together_members (profile_id, tone, profiles (name))";
+const TOGETHER_SELECT =
+  "id, name, invite_code, invite_expires_at, together_members (profile_id, tone, role, joined_at, left_at, profiles (name))";
 const CHORE_SELECT = "id, title, due, repeat, done_at, chore_assignees (profile_id)";
 const PLACE_SELECT =
   "id, name, category, area, street, city, province, country, maps_url, status, hue, google_place_id, lat, lng, location_fetched_at, place_ratings (profile_id, rating), visits (id, day, title, note, rating)";
 
 // ---- Mapping rows to models ---------------------------------------------------
 
-const TONE_ORDER: Record<MemberTone, number> = { accent: 0, partner: 1 };
-
 function toMember(row: MemberRow): Member {
   const name = row.profiles?.name ?? "Someone";
-  return { id: row.profile_id, name, initial: name.charAt(0).toUpperCase(), tone: row.tone };
+  return { id: row.profile_id, name, initial: name.charAt(0).toUpperCase(), tone: row.tone, role: row.role };
 }
 
+const fromJson = (m: MemberJson) => ({ id: m.id, name: m.name, initial: m.name.charAt(0).toUpperCase(), tone: m.tone });
+
 function toTogether(row: TogetherRow, meId: MemberId): Together {
-  const members = [...row.together_members].sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone]).map(toMember);
-  return { id: row.id, name: row.name, members, meId, inviteCode: row.invite_code };
+  const byJoin = [...row.together_members].sort((a, b) => a.joined_at.localeCompare(b.joined_at));
+  const members = byJoin.filter((m) => m.left_at === null).map(toMember);
+  // a Together from before roles has no owner yet: the first member is (ensure_owner() in the schema makes it so)
+  if (members.length && !members.some((m) => m.role === "owner")) members[0] = { ...members[0]!, role: "owner" };
+  return {
+    id: row.id,
+    name: row.name,
+    members,
+    formerMembers: byJoin.filter((m) => m.left_at !== null).map(toMember),
+    meId,
+    inviteCode: row.invite_code,
+    inviteExpiresAt: row.invite_expires_at,
+  };
 }
+
+const toSummary = (row: TogetherSummaryRow): TogetherSummary => ({
+  id: row.id,
+  name: row.name,
+  memberCount: row.member_count,
+  members: row.members.map(fromJson),
+  tone: row.tone,
+  role: row.role,
+  current: row.is_current,
+  lastActivityAt: row.last_activity_at,
+  hasNews: row.has_news,
+});
 
 const toShoppingItem = (row: ShoppingRow): ShoppingItem => ({
   id: row.id,
@@ -255,7 +311,7 @@ export class RealServerService implements ServerBackendService {
 
   async createTogether({ name }: { name: string }): Promise<DataResult<Together>> {
     const sb = await createClient();
-    const { error } = await sb.rpc("v1_create_together", { p_name: name });
+    const { error } = await sb.rpc("v2_create_together", { p_name: name });
     if (error) return fail(message(error, "We couldn't make your Together. Try again."));
     return this.getTogether();
   }
@@ -290,9 +346,72 @@ export class RealServerService implements ServerBackendService {
 
   async joinTogether({ code }: { code: string }): Promise<DataResult<Together>> {
     const sb = await createClient();
-    const { error } = await sb.rpc("v1_join_together", { p_code: code });
+    const { error } = await sb.rpc("v2_join_together", { p_code: code });
     if (error) return fail(message(error, "We couldn't join that Together. Try again."));
     return this.getTogether();
+  }
+
+  async getInvitePreview({ code }: { code: string }): Promise<DataResult<InvitePreview>> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_invite_preview", { p_code: code });
+    const { error } = result;
+    const data: unknown = result.data;
+    if (error) return fail(message(error, "We couldn't check that code. Try again."));
+    const row = (data as InvitePreviewRow[] | null)?.[0];
+    if (!row) return { data: null };
+    return ok({
+      togetherId: row.id,
+      name: row.name,
+      members: row.members.map(fromJson),
+      expired: row.expired,
+      alreadyMember: row.already_member,
+    });
+  }
+
+  async listMyTogethers(): Promise<DataResult<TogetherSummary[]>> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_list_my_togethers");
+    const { error } = result;
+    const data: unknown = result.data;
+    if (error) return fail(message(error, "We couldn't load your Togethers."));
+    return ok(((data as TogetherSummaryRow[] | null) ?? []).map(toSummary));
+  }
+
+  async switchTogether({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.rpc("v1_switch_together", { p_together_id: id });
+    return error ? notSaved(message(error, "We couldn't open that Together. Try again.")) : saved;
+  }
+
+  async newInviteCode(): Promise<DataResult<InviteCode>> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_new_invite_code");
+    const { error } = result;
+    const data: unknown = result.data;
+    if (error) return fail(message(error, "We couldn't make a new code. Try again."));
+    const row = (data as { invite_code: string; invite_expires_at: string }[] | null)?.[0];
+    return row ? ok({ code: row.invite_code, expiresAt: row.invite_expires_at }) : fail(TRY_AGAIN);
+  }
+
+  async removeMember({ memberId }: { memberId: MemberId }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.rpc("v1_remove_member", { p_profile_id: memberId });
+    return error ? notSaved(message(error, "We couldn't remove them. Try again.")) : saved;
+  }
+
+  async setMemberRole({ memberId, role }: { memberId: MemberId; role: MemberRole }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.rpc("v1_set_member_role", { p_profile_id: memberId, p_role: role });
+    return error ? notSaved(message(error, TRY_AGAIN)) : saved;
+  }
+
+  async leaveTogether(): Promise<DataResult<{ nextTogetherId: string | null }>> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_leave_together");
+    const { error } = result;
+    const data: unknown = result.data;
+    if (error) return fail(message(error, "We couldn't take you out of it. Try again."));
+    return ok({ nextTogetherId: (data as string | null) ?? null });
   }
 
   // ---- Shopping -----------------------------------------------------------------

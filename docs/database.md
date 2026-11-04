@@ -43,13 +43,14 @@ and behaviour the same can edit the existing version in place.
 
 ## Shape
 
-Everything shared hangs off a **together**, which holds two people. Every shared table carries `together_id`.
+Everything shared hangs off a **together**. A person can be in many; one is their current one. Every shared table
+carries `together_id`.
 
 ```mermaid
 erDiagram
   auth_users ||--|| profiles : "trigger creates"
-  profiles ||--o| together_members : "is in (max 1)"
-  togethers ||--|{ together_members : "has (max 2)"
+  profiles ||--o{ together_members : "is in"
+  togethers ||--|{ together_members : "has"
 
   togethers ||--o{ shopping_items : ""
   togethers ||--o{ item_history : "autocomplete"
@@ -74,9 +75,9 @@ erDiagram
 
 | Table | Holds | Maps to |
 |---|---|---|
-| `profiles` | Name, one per auth user | `Member` (`initial` is derived) |
-| `togethers` | Name, invite code, time zone | `Together` |
-| `together_members` | Who's in it, and their colour (`accent` / `partner`) | `Together.members`, `Member.tone` |
+| `profiles` | Name, and the current Together (`current_together_id`), one per auth user | `Member` (`initial` is derived) |
+| `togethers` | Name, invite code and when it expires, time zone | `Together`, `TogetherSummary` |
+| `together_members` | Who's in it (or was: `left_at`), their role and colour, when they last looked | `Together.members`, `Together.formerMembers`, `Member.tone`, `Member.role` |
 | `shopping_items` | The list; `done_at` set = in the basket | `ShoppingItem` |
 | `item_history` | Every name ever added, with counts | `CatalogEntry` via `v1_item_catalog()` |
 | `chores`, `chore_assignees` | Chores and who they're for | `Chore` |
@@ -91,18 +92,25 @@ Supabase service divides by 100.
 
 ## Decisions
 
-**Two people, one Together each.** `together_members` has `unique (profile_id)`, so each person is in one Together.
-It also has `unique (together_id, tone)`, which allows two people per Together, each with their own colour.
-`getTogether()` returns a single Together, and that's what these constraints enforce. Allowing more people later
-means relaxing these two constraints and adding more tones.
+**Many Togethers per person.** Membership has a `role` (`owner` / `member`; the creator is the owner) and a `tone`
+(`accent`, `partner`, `success`, `warning`, given in join order and repeating after four). `profiles.current_together_id`
+says which Together the app shows. `my_together_id()` reads it while you're still a member there, and otherwise falls
+back to the Together you joined first. Every policy goes through `my_together_id()`, so switching changes everything you
+see. The switcher lists the rest through `v1_list_my_togethers()`.
+
+**Leaving keeps what you added.** Leaving or being removed sets `together_members.left_at` instead of deleting the
+row. So wishes, claims, assignments and ratings keep a valid foreign key and still show the person's name. Rejoining
+clears `left_at`. There are no write policies on `together_members`: every change goes through the functions below.
+A Together with members but no owner (made before roles existed) treats its first member as the owner:
+`ensure_owner()` promotes them the first time an owner-only function or `v1_leave_together` runs, and the app shows them
+as owner until then.
 
 **Integrity across Togethers.** Child tables repeat `together_id` and use composite foreign keys:
 
 - `(chore_id, together_id) → chores`
 - `(together_id, profile_id) → together_members`
 
-So the database itself rejects assigning a chore to someone outside the Together, without relying on a policy. When
-someone leaves, their assignments, ratings and wishes cascade away, and the shared lists stay.
+So the database itself rejects assigning a chore to someone outside the Together, without relying on a policy.
 
 **Row-level security.** Every table has RLS on. The base rule is
 `together_id = (select my_together_id())`. `my_together_id()` is `security definer`, which avoids policies recursing
@@ -111,7 +119,8 @@ Stricter rules sit on top:
 
 - Shopping items can only be added as yourself (a restrictive policy).
 - Ratings: you set only your own.
-- Wishes: only the owner adds, edits or removes them.
+- Wishes: only the owner adds, edits or removes them, and only in their current Together (so someone who left can't
+  change what stays behind).
 - **Wish claims are a separate table, so RLS can hide them from the wish's owner.** Gifts stay a surprise at the
   database level, not just in the UI. Its primary key is `wish_id`, which allows one claim per wish.
 
@@ -119,8 +128,17 @@ Stricter rules sit on top:
 
 | Function | Does |
 |---|---|
-| `v1_create_together(name)` | Makes the Together with a fresh 6-character code (no 0/O/1/I), and adds you as `accent` |
-| `v1_join_together(code)` | Normalises the code (case, spaces, dashes), checks the Together isn't full, adds you as `partner` |
+| `v2_create_together(name)` | Makes a Together with a fresh 6-character code (no 0/O/1/I) that works for 48 hours. You're its `owner` (`accent`), and it becomes current. |
+| `v2_join_together(code)` | Normalises the code (case, spaces, dashes), refuses expired codes, adds you with the next tone (or brings you back), and makes it current |
+| `v1_create_together`, `v1_join_together` | The one-Together versions. Kept until no deployed app calls them. |
+| `v1_switch_together(id)` | Makes another of your Togethers current |
+| `v1_list_my_togethers()` | Your Togethers, with members, your tone and role, `last_activity_at` (the newest thing anyone added or did) and `has_news` (someone else did something after your `last_seen_at` there) |
+| `v1_invite_preview(code)` | What a join link opens, before joining: name, members, expired, already in |
+| `v1_new_invite_code()` | Owners: a fresh code good for 48 hours; the old one stops working |
+| `v1_remove_member(id)` | Owners: marks someone as left. Not yourself. |
+| `v1_set_member_role(id, role)` | Owners: make someone an owner or a member again; a Together always keeps an owner |
+| `v1_leave_together()` | Marks you as left. The last owner has to hand over first; the last person out deletes the Together. Returns the Together you land in, or null. |
+| `v2_chore_reminders()` | Server job only: devices to remind, with chores due in every Together the person is still in (v1 also reminded people who had left) |
 | `v1_set_chore_done(id, done)` | Once-off: sets `done_at`. Recurring: logs the completion and moves `due` to the next date after today in the Together's time zone. Monthly keeps the day of the month (31 Jan → 28 Feb → 31 Mar). |
 | `v1_item_catalog()` | Your history plus "popular" names. A name counts as popular only when at least 3 Togethers have added it, so one couple's list never leaks. |
 

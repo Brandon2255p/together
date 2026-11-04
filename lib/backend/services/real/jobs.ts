@@ -14,7 +14,7 @@ export class RealJobsService implements JobsBackendService {
   async choreReminders() {
     const sb = createAdminClient();
     if (!sb) return { data: null, error: "SUPABASE_SECRET_KEY isn't set" };
-    const result = await sb.rpc("v1_chore_reminders");
+    const result = await sb.rpc("v2_chore_reminders");
     if (result.error) return { data: null, error: result.error.message };
     const rows = (result.data ?? []) as ReminderRow[];
     return {

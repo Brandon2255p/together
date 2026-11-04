@@ -23,6 +23,10 @@ import type {
   ShoppingItem,
   Together,
   WishItem,
+  InviteCode,
+  InvitePreview,
+  MemberRole,
+  TogetherSummary,
 } from "@/lib/models";
 
 /**
@@ -35,7 +39,22 @@ export interface ServerBackendService {
   getTogether(): Promise<DataResult<Together>>;
   createTogether(params: { name: string }): Promise<DataResult<Together>>;
   renameTogether(params: { name: string }): Promise<MutationResult>;
+  /** joins (or reopens) the Together the code is for and makes it current, even when you're in others */
   joinTogether(params: { code: string }): Promise<DataResult<Together>>;
+  /** what a code opens, before joining; null data when it matches nothing */
+  getInvitePreview(params: { code: string }): Promise<DataResult<InvitePreview>>;
+  /** every Together you're in, for the switcher */
+  listMyTogethers(): Promise<DataResult<TogetherSummary[]>>;
+  /** makes another of your Togethers current */
+  switchTogether(params: { id: string }): Promise<MutationResult>;
+  /** owners only: a fresh code good for 48 hours; the old one stops working */
+  newInviteCode(): Promise<DataResult<InviteCode>>;
+  /** owners only: what they added stays */
+  removeMember(params: { memberId: MemberId }): Promise<MutationResult>;
+  /** owners only; a Together always keeps an owner */
+  setMemberRole(params: { memberId: MemberId; role: MemberRole }): Promise<MutationResult>;
+  /** leaves the current Together; data is the Together you land in, or null when there's none left */
+  leaveTogether(): Promise<DataResult<{ nextTogetherId: string | null }>>;
 
   // You
   /** renames the signed-in person everywhere they appear */

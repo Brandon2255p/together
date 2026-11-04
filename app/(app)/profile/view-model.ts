@@ -87,6 +87,7 @@ export function useProfileViewModel(together: Together, vapidPublicKey: string |
   const me: Member = {
     id: together.meId,
     tone: found?.tone ?? "accent",
+    role: found?.role ?? "member",
     name: clean || saved,
     initial: (clean || saved).charAt(0).toUpperCase() || "?",
   };

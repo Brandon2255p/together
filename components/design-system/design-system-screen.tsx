@@ -27,10 +27,37 @@ import { TabBar } from "@/components/ui/tab-bar";
 import { TaskRow } from "@/components/ui/task-row";
 import { TextField } from "@/components/ui/text-field";
 import { Rating, Thumb } from "@/components/ui/thumb";
-import type { Member } from "@/lib/models";
+import dynamic from "next/dynamic";
+import type { Member, TogetherSummary } from "@/lib/models";
+import { clusterExtent, layoutBubbles } from "@/lib/together/bubbles";
+import { MemberRow } from "@/components/together/member-row";
+import { SwitcherPill } from "@/components/together/switcher-pill";
 
-const BRANDON: Member = { id: "b", name: "Brandon", initial: "B", tone: "accent" };
-const ADELE: Member = { id: "a", name: "Adele", initial: "A", tone: "partner" };
+const BRANDON: Member = { id: "b", name: "Brandon", initial: "B", tone: "accent", role: "owner" };
+const ADELE: Member = { id: "a", name: "Adele", initial: "A", tone: "partner", role: "member" };
+
+const SAM: Member = { id: "s", name: "Sam", initial: "S", tone: "success", role: "member" };
+const PRIYA: Member = { id: "p", name: "Priya", initial: "P", tone: "warning", role: "member" };
+
+const BubbleScene = dynamic(() => import("@/components/together/bubble-scene"), { ssr: false, loading: () => null });
+
+// sample Togethers for the bubble scene, at a fixed time so the page renders the same everywhere
+const SAMPLE_NOW = Date.parse("2026-11-04T12:00:00Z");
+const sample = (id: string, name: string, memberCount: number, hoursAgo: number, current = false): TogetherSummary => ({
+  id,
+  name,
+  memberCount,
+  members: [],
+  tone: "accent",
+  role: "member",
+  current,
+  lastActivityAt: new Date(SAMPLE_NOW - hoursAgo * 3_600_000).toISOString(),
+  hasNews: id === "t-2",
+});
+const BUBBLES = layoutBubbles(
+  [sample("t-1", "Brandon & Adele", 2, 0.5, true), sample("t-2", "Family", 3, 2), sample("t-3", "Kloof St flat", 4, 24 * 9)],
+  SAMPLE_NOW
+);
 
 const COLOURS = [
   ["bg", "#FBF8F4"],
@@ -222,6 +249,28 @@ export function DesignSystemScreen(p: DesignSystemScreenProps) {
           <Avatar member={ADELE} size="lg" />
           <Avatar member={ADELE} size="xl" />
           <AvatarStack members={[BRANDON, ADELE]} size="lg" />
+        </div>
+        <Label>Member Avatar tones, in join order</Label>
+        <div className="flex items-center gap-3">
+          {[BRANDON, ADELE, SAM, PRIYA].map((m) => (
+            <Avatar key={m.id} member={m} size="lg" />
+          ))}
+          <AvatarStack members={[BRANDON, ADELE, SAM, PRIYA]} size="lg" />
+        </div>
+      </Section>
+
+      <Section title="Togethers">
+        <Label>Member Row</Label>
+        <MemberRow member={BRANDON} detail="You" />
+        <MemberRow member={ADELE} onActions={() => p.onSheetOpenChange(true)} />
+        <Label>Switcher pill</Label>
+        <div className="flex gap-2">
+          <SwitcherPill name="Brandon & Adele" tone="accent" hasNews={false} href="/design-system" />
+          <SwitcherPill name="Family" tone="partner" hasNews href="/design-system" />
+        </div>
+        <Label>Bubble scene (drag to spin)</Label>
+        <div className="h-80 overflow-hidden rounded-card bg-surface-muted">
+          <BubbleScene bubbles={BUBBLES} extent={clusterExtent(BUBBLES)} onPick={() => {}} />
         </div>
       </Section>
 

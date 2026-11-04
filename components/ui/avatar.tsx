@@ -1,4 +1,4 @@
-import type { Member } from "@/lib/models";
+import type { Member, MemberTone } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 const SIZES = {
@@ -8,10 +8,13 @@ const SIZES = {
   xl: "size-[84px] text-[34px]",
 } as const;
 
-const TONES = {
+/** each member's colour, in join order: the Figma Member Avatar's Tone */
+export const TONE_BG: Record<MemberTone, string> = {
   accent: "bg-accent",
   partner: "bg-partner",
-} as const;
+  success: "bg-success",
+  warning: "bg-warning",
+};
 
 export type AvatarSize = keyof typeof SIZES;
 
@@ -32,7 +35,7 @@ export function Avatar({
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full font-bold text-on-accent ring-2 ring-surface",
         SIZES[size],
-        TONES[member.tone],
+        TONE_BG[member.tone],
         className
       )}
     >

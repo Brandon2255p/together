@@ -25,4 +25,4 @@ create policy "claim as self" on public.wish_claims for insert to authenticated
     and not exists (select 1 from public.wishes w where w.id = wish_id and w.owner_id = (select auth.uid()))
   );
 create policy "unclaim own" on public.wish_claims for delete to authenticated
-  using (claimed_by = (select auth.uid()));
+  using (together_id = (select public.my_together_id()) and claimed_by = (select auth.uid()));

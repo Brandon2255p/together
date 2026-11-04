@@ -6,7 +6,7 @@ export interface MonthDay {
   day: number;
   inMonth: boolean;
   /** one dot per kind of thing on the day: each member's events, then chores */
-  dots: ("accent" | "partner" | "chore")[];
+  dots: (MemberTone | "chore")[];
 }
 
 /** The month as weeks, Monday first, padded with the days around it */
@@ -42,7 +42,7 @@ export function monthGrid(
         key,
         day: date.getUTCDate(),
         inMonth: date.getUTCMonth() === month,
-        dots: (["accent", "partner", "chore"] as const).filter((d) => dots.has(d)),
+        dots: (["accent", "partner", "success", "warning", "chore"] as const).filter((d) => dots.has(d)),
       });
     }
     grid.push(row);

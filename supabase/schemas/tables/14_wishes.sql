@@ -23,8 +23,9 @@ create policy "members read" on public.wishes for select to authenticated
   using (together_id = (select public.my_together_id()));
 create policy "add own" on public.wishes for insert to authenticated
   with check (together_id = (select public.my_together_id()) and owner_id = (select auth.uid()));
+-- only in your current Together, so someone who left can't change what stays behind
 create policy "edit own" on public.wishes for update to authenticated
-  using (owner_id = (select auth.uid()))
-  with check (owner_id = (select auth.uid()));
+  using (together_id = (select public.my_together_id()) and owner_id = (select auth.uid()))
+  with check (together_id = (select public.my_together_id()) and owner_id = (select auth.uid()));
 create policy "remove own" on public.wishes for delete to authenticated
-  using (owner_id = (select auth.uid()));
+  using (together_id = (select public.my_together_id()) and owner_id = (select auth.uid()));
