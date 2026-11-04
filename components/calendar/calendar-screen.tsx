@@ -3,16 +3,16 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeftIcon, ChevronRightIcon, CoffeeIcon } from "lucide-react";
 import type { MonthDay } from "@/lib/calendar/month";
-import type { DayKey, Member } from "@/lib/models";
+import type { DayKey, Member, MemberTone } from "@/lib/models";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
-import { AvatarStack } from "@/components/ui/avatar";
+import { AvatarStack, TONE_BG } from "@/components/ui/avatar";
 import { IconButton } from "@/components/ui/icon-button";
 import { InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
 import { ListItem } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 
 export type AgendaRow =
-  | { kind: "event"; id: string; title: string; when: string; where: string | null; people: Member[]; tone: "accent" | "partner" | "ink" }
+  | { kind: "event"; id: string; title: string; when: string; where: string | null; people: Member[]; tone: MemberTone | "ink" }
   | { kind: "chore"; id: string; row: ChoreRowData };
 
 export interface CalendarScreenProps {
@@ -32,8 +32,8 @@ export interface CalendarScreenProps {
   error: string | null;
 }
 
-const DOT = { accent: "bg-accent", partner: "bg-partner", chore: "bg-ink-subtle" } as const;
-const BAR = { accent: "bg-accent", partner: "bg-partner", ink: "bg-ink" } as const;
+const DOT: Record<MemberTone | "chore", string> = { ...TONE_BG, chore: "bg-ink-subtle" };
+const BAR: Record<MemberTone | "ink", string> = { ...TONE_BG, ink: "bg-ink" };
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 export function CalendarScreen(props: CalendarScreenProps) {
@@ -110,7 +110,7 @@ export function CalendarScreen(props: CalendarScreenProps) {
       <div className="flex items-center gap-3.5 text-caption text-ink-muted">
         {legend.map((m) => (
           <span key={m.id} className="flex items-center gap-1.5">
-            <span className={cn("size-2 rounded-full", m.tone === "accent" ? "bg-accent" : "bg-partner")} />
+            <span className={cn("size-2 rounded-full", TONE_BG[m.tone])} />
             {m.name}
           </span>
         ))}

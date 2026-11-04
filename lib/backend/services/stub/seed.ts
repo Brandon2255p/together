@@ -3,11 +3,15 @@ import type { CalendarEvent, CatalogEntry, Chore, Goal, Member, Place, ShoppingI
 
 // Seed data for the stub backend. Dates are relative to today so the app always looks lived-in.
 
-export const BRANDON: Member = { id: "m-brandon", name: "Brandon", initial: "B", tone: "accent" };
-export const ADELE: Member = { id: "m-adele", name: "Adele", initial: "A", tone: "partner" };
+export const BRANDON: Member = { id: "m-brandon", name: "Brandon", initial: "B", tone: "accent", role: "owner" };
+export const ADELE: Member = { id: "m-adele", name: "Adele", initial: "A", tone: "partner", role: "member" };
 
+/** one Together's data. The stub keeps one per Together (StubWorld); the signed-in person is always Brandon. */
 export interface StubState {
   together: Together | null;
+  /** ISO time of the newest activity, and whether someone else did something since Brandon last opened it */
+  lastActivityAt: string;
+  hasNews: boolean;
   shopping: ShoppingItem[];
   catalog: CatalogEntry[];
   chores: Chore[];
@@ -33,6 +37,8 @@ const inCapeTown = (places: SeedPlace[]): Place[] =>
     ...p,
   }));
 
+const hoursFromNow = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+
 export function seed(today = todayKey()): StubState {
   const d = (days: number) => addDays(today, days);
   return {
@@ -40,9 +46,13 @@ export function seed(today = todayKey()): StubState {
       id: "t-1",
       name: "Brandon & Adele",
       members: [BRANDON, ADELE],
+      formerMembers: [],
       meId: BRANDON.id,
       inviteCode: "K7Q29X",
+      inviteExpiresAt: hoursFromNow(41),
     },
+    lastActivityAt: hoursFromNow(-0.5),
+    hasNews: false,
     shopping: [
       { id: "s-1", name: "Oat milk", quantity: 2, addedBy: BRANDON.id, done: false },
       { id: "s-2", name: "Avocados", quantity: 3, addedBy: ADELE.id, done: false },
@@ -133,4 +143,129 @@ export function seed(today = todayKey()): StubState {
     ],
     nextId: 100,
   };
+}
+
+// ---- More Togethers -----------------------------------------------------------------------------------------------
+
+const member = (id: string, name: string, tone: Member["tone"], role: Member["role"] = "member"): Member => ({
+  id,
+  name,
+  initial: name.charAt(0).toUpperCase(),
+  tone,
+  role,
+});
+
+/** an empty Together's data, for new ones and as the base of the extra seeds */
+export function blankState(together: Together | null, nextId = 100): StubState {
+  return {
+    together,
+    lastActivityAt: new Date().toISOString(),
+    hasNews: false,
+    shopping: [],
+    catalog: [],
+    chores: [],
+    events: [],
+    places: [],
+    wishes: [],
+    goals: [],
+    nextId,
+  };
+}
+
+/** Brandon's family: Linda owns it, Brandon joined second. Sam added something since Brandon last looked. */
+function seedFamily(today: string): StubState {
+  const d = (days: number) => addDays(today, days);
+  const linda = member("m-linda", "Linda", "accent", "owner");
+  const brandon = member(BRANDON.id, BRANDON.name, "partner");
+  const sam = member("m-sam", "Sam", "success");
+  return {
+    ...blankState(
+      {
+        id: "t-2",
+        name: "Family",
+        members: [linda, brandon, sam],
+        formerMembers: [],
+        meId: BRANDON.id,
+        inviteCode: "F4MXLY",
+        inviteExpiresAt: hoursFromNow(12),
+      },
+      1000,
+    ),
+    lastActivityAt: hoursFromNow(-2),
+    hasNews: true,
+    shopping: [
+      { id: "s-f1", name: "Braai wood", quantity: 2, addedBy: sam.id, done: false },
+      { id: "s-f2", name: "Boerewors", quantity: 1, addedBy: linda.id, done: false },
+    ],
+    chores: [
+      { id: "c-f1", title: "Book the Christmas venue", due: d(6), repeat: "once", assignees: [linda.id, brandon.id], done: false },
+    ],
+    events: [{ id: "e-f1", title: "Sunday lunch", day: d(3), time: "12:30", location: "Constantia", attendees: [linda.id, brandon.id, sam.id] }],
+    wishes: [{ id: "w-f1", ownerId: sam.id, name: "Cricket bat", price: 1400, url: null, claimedBy: null, hue: "success" }],
+  };
+}
+
+/** a flat Brandon owns. Kyle moved out (left), but his wish stays. */
+function seedFlat(today: string): StubState {
+  const d = (days: number) => addDays(today, days);
+  const brandon = member(BRANDON.id, BRANDON.name, "accent", "owner");
+  const thandi = member("m-thandi", "Thandi", "partner");
+  const jo = member("m-jo", "Jo", "success");
+  const priya = member("m-priya", "Priya", "warning");
+  const kyle = member("m-kyle", "Kyle", "accent");
+  return {
+    ...blankState(
+      {
+        id: "t-3",
+        name: "Kloof St flat",
+        members: [brandon, thandi, jo, priya],
+        formerMembers: [kyle],
+        meId: BRANDON.id,
+        inviteCode: "KL7FST",
+        inviteExpiresAt: hoursFromNow(-3),
+      },
+      2000,
+    ),
+    lastActivityAt: hoursFromNow(-24 * 9),
+    shopping: [{ id: "s-k1", name: "Toilet paper", quantity: 2, addedBy: jo.id, done: false }],
+    chores: [
+      { id: "c-k1", title: "Take out the bins", due: d(1), repeat: "weekly", assignees: [thandi.id], done: false },
+      { id: "c-k2", title: "Clean the fridge", due: d(5), repeat: "monthly", assignees: [brandon.id, priya.id], done: false },
+    ],
+    wishes: [{ id: "w-k1", ownerId: kyle.id, name: "Plant for the stoep", price: 300, url: null, claimedBy: null, hue: "accent" }],
+  };
+}
+
+/** a Together Brandon isn't in, so joining with a code can be tried: PADL27 */
+function seedPadel(): StubState {
+  const sam = member("m-sam", "Sam", "accent", "owner");
+  const lee = member("m-lee", "Lee", "partner");
+  return {
+    ...blankState(
+      { id: "t-4", name: "Padel crew", members: [sam, lee], formerMembers: [], meId: BRANDON.id, inviteCode: "PADL27", inviteExpiresAt: hoursFromNow(30) },
+      3000,
+    ),
+    lastActivityAt: hoursFromNow(-5),
+    hasNews: true,
+  };
+}
+
+/** a Together whose code has run out: XPRD99 */
+function seedExpired(): StubState {
+  const zee = member("m-zee", "Zee", "accent", "owner");
+  return blankState(
+    { id: "t-5", name: "Hiking club", members: [zee], formerMembers: [], meId: BRANDON.id, inviteCode: "XPRD99", inviteExpiresAt: hoursFromNow(-1) },
+    4000,
+  );
+}
+
+/** every Together the stub knows, and which one Brandon has open */
+export interface StubWorld {
+  currentId: string | null;
+  togethers: Record<string, StubState>;
+}
+
+export function seedWorld(today = todayKey()): StubWorld {
+  const all = [seed(today), seedFamily(today), seedFlat(today), seedPadel(), seedExpired()];
+  return { currentId: "t-1", togethers: Object.fromEntries(all.map((s) => [s.together!.id, s])) };
 }

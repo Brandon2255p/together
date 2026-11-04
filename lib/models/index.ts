@@ -2,24 +2,64 @@
 
 export type MemberId = string;
 
-/** Each member has a colour the whole app uses for them (dots, avatars, ratings) */
-export type MemberTone = "accent" | "partner";
+/** Each member has a colour the whole app uses for them (dots, avatars, ratings), given in join order */
+export type MemberTone = "accent" | "partner" | "success" | "warning";
+
+/** owners make invite codes, remove people and make others owners */
+export type MemberRole = "owner" | "member";
 
 export interface Member {
   id: MemberId;
   name: string;
   initial: string;
   tone: MemberTone;
+  role: MemberRole;
 }
 
-/** A circle of people sharing lists, a calendar, places and wishes */
+/** A circle of people sharing lists, a calendar, places and wishes. A person can be in many; one is current. */
 export interface Together {
   id: string;
   name: string;
+  /** everyone in it now, in join order */
   members: Member[];
+  /** people who left or were removed: what they added stays, so their names are still needed */
+  formerMembers: Member[];
   /** the signed-in member */
   meId: MemberId;
   inviteCode: string;
+  /** ISO time the invite code stops working */
+  inviteExpiresAt: string;
+}
+
+/** One of your Togethers, for the switcher (Home pill and /togethers) */
+export interface TogetherSummary {
+  id: string;
+  name: string;
+  memberCount: number;
+  members: Pick<Member, "id" | "name" | "initial" | "tone">[];
+  /** your tone and role in it */
+  tone: MemberTone;
+  role: MemberRole;
+  current: boolean;
+  /** ISO time of the newest thing anyone added or did there */
+  lastActivityAt: string;
+  /** someone else did something there since you last opened it */
+  hasNews: boolean;
+}
+
+export interface InviteCode {
+  code: string;
+  /** ISO time */
+  expiresAt: string;
+}
+
+/** what an invite code opens, before joining (/join/CODE) */
+export interface InvitePreview {
+  togetherId: string;
+  name: string;
+  members: Pick<Member, "id" | "name" | "initial" | "tone">[];
+  expired: boolean;
+  alreadyMember: boolean;
 }
 
 /** a calendar day, YYYY-MM-DD in the Together's time zone */

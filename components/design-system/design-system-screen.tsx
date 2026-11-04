@@ -29,8 +29,8 @@ import { TextField } from "@/components/ui/text-field";
 import { Rating, Thumb } from "@/components/ui/thumb";
 import type { Member } from "@/lib/models";
 
-const BRANDON: Member = { id: "b", name: "Brandon", initial: "B", tone: "accent" };
-const ADELE: Member = { id: "a", name: "Adele", initial: "A", tone: "partner" };
+const BRANDON: Member = { id: "b", name: "Brandon", initial: "B", tone: "accent", role: "owner" };
+const ADELE: Member = { id: "a", name: "Adele", initial: "A", tone: "partner", role: "member" };
 
 const COLOURS = [
   ["bg", "#FBF8F4"],
