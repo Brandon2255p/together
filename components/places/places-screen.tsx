@@ -11,7 +11,9 @@ import { EmptyState, InlineError, ScreenHeader } from "@/components/ui/layout";
 import { ListItem } from "@/components/ui/motion";
 import { Segmented } from "@/components/ui/segmented";
 import { TextField } from "@/components/ui/text-field";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Rating, Thumb } from "@/components/ui/thumb";
+import { cn } from "@/lib/utils";
 
 export interface PlaceCardData {
   id: string;
@@ -19,8 +21,13 @@ export interface PlaceCardData {
   subtitle: string;
   hue: Hue;
   rating: number | null;
+  photoUrl: string | null;
   badge: string | null;
   href: Route;
+  /** stays the same when an optimistic row is swapped for the saved one, so it doesn't animate out and back in */
+  key?: string;
+  /** still saving: no detail page to open yet, the subtitle shimmers */
+  pending?: boolean;
 }
 
 export interface PlacesScreenProps {
@@ -84,15 +91,24 @@ export function PlacesScreen(props: PlacesScreenProps) {
       <ul className="flex flex-col gap-2.5">
         <AnimatePresence initial={false} mode="popLayout">
           {places.map((p) => (
-            <ListItem key={p.id}>
+            <ListItem key={p.key ?? p.id}>
               <Link
                 href={p.href}
-                className="flex items-center gap-3.5 rounded-3xl bg-surface p-3 pr-4 transition-transform active:scale-[0.99]"
+                aria-disabled={p.pending}
+                onClick={p.pending ? (e) => e.preventDefault() : undefined}
+                className={cn(
+                  "flex items-center gap-3.5 rounded-3xl bg-surface p-3 pr-4 transition-transform active:scale-[0.99]",
+                  p.pending && "pointer-events-none",
+                )}
               >
-                <Thumb hue={p.hue} icon={<MapPinIcon />} />
+                <Thumb hue={p.hue} icon={<MapPinIcon />} src={p.photoUrl} />
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="truncate text-body-strong">{p.name}</span>
-                  <span className="truncate text-caption font-normal text-ink-muted">{p.subtitle}</span>
+                  <span className={cn("truncate text-body-strong", p.pending && "text-ink-muted")}>{p.name}</span>
+                  {p.pending ? (
+                    <Skeleton className="h-3 w-2/5 rounded-full" />
+                  ) : (
+                    <span className="truncate text-caption font-normal text-ink-muted">{p.subtitle}</span>
+                  )}
                   {p.rating !== null || p.badge ? (
                     <span className="flex items-center gap-2">
                       {p.rating !== null ? <Rating value={p.rating} /> : null}

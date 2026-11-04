@@ -1,7 +1,7 @@
 import "server-only";
 import { addDays } from "@/lib/format";
 import type { ServerBackendService } from "@/lib/backend/interfaces/server";
-import type { Chore, DataResult, MutationResult, Place, Together } from "@/lib/models";
+import type { Chore, DataResult, MutationResult, NewPlace, Place, PlaceMatch, PlaceQuery, Together } from "@/lib/models";
 import { ADELE, BRANDON, seed, type StubState } from "@/lib/backend/services/stub/seed";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis).
@@ -146,17 +146,31 @@ export class StubServerService implements ServerBackendService {
     return place ? ok(place) : fail<Place>("We couldn't find that place.");
   }
 
-  async addPlace({ name, mapsUrl, status }: { name: string; mapsUrl: string | null; status: Place["status"] }) {
+  async addPlace({ name, area, category, mapsUrl, status, google }: NewPlace) {
     await wait();
-    log("addPlace", { name, mapsUrl, status });
+    log("addPlace", { name, area, category, mapsUrl, status, google });
     const hues = ["accent", "partner", "success", "warning"] as const;
     const s = state();
     const place: Place = {
-      id: id("p"), name, category: "Saved place", area: mapsUrl ? "From Google Maps" : "Added by hand",
+      id: id("p"), name, category: category ?? "Saved place", area: area ?? (mapsUrl ? "From Google Maps" : "Added by hand"),
       mapsUrl, status, ratings: {}, visits: [], hue: hues[s.places.length % hues.length] ?? "accent",
+      googleRating: google?.rating ?? null, photoUrl: null,
     };
     s.places.unshift(place);
     return ok(place);
+  }
+
+  /** no Google here: a made-up match for anything saved from a Maps link, so the details show up */
+  async lookUpPlace(query: PlaceQuery): Promise<PlaceMatch | null> {
+    await wait();
+    log("lookUpPlace", query);
+    const name = query.text.split(",")[0]?.trim() ?? query.text;
+    return { placeId: `stub-${name}`, name, category: "Restaurant", area: null, rating: 4.4, photo: null };
+  }
+
+  async getPlacePhotoUrl({ id: placeId }: { id: string }) {
+    log("getPlacePhotoUrl", { id: placeId });
+    return Promise.resolve(null);
   }
 
   async getWishes({ ownerId }: { ownerId: string }) {

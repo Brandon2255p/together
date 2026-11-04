@@ -155,6 +155,8 @@ services:
       # the server skips the tailnet and talks to Kong on the compose network
       - 'SUPABASE_URL=http://supabase-kong:8000'
       - 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${SERVICE_SUPABASEANON_KEY}'
+      # optional: Google Places details (category, rating, photo) for places saved from Maps links
+      - 'GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}'
   supabase-kong:
     image: 'kong/kong:3.9.1'
     entrypoint: /home/kong/kong-entrypoint.sh

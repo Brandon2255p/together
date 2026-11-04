@@ -20,6 +20,8 @@ export function usePlaceDetailViewModel({ place, together }: PlaceDetailViewData
   return {
     name: place.name,
     hue: place.hue,
+    photoUrl: place.photoUrl ?? null,
+    googleRating: place.googleRating ?? null,
     tags: [
       { label: place.category, tone: "neutral" as const },
       { label: place.area, tone: "neutral" as const },

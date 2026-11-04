@@ -8,6 +8,8 @@ import { TaskRow } from "@/components/ui/task-row";
 /** A chore shaped for display by the view-model */
 export interface ChoreRowData {
   id: string;
+  /** stays the same when an optimistic row is swapped for the saved one, so it doesn't animate out and back in */
+  key?: string;
   title: string;
   done: boolean;
   people: Member[];

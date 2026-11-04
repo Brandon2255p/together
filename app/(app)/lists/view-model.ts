@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { ChoreDraft } from "@/components/lists/add-chore-sheet";
 import type { ListsTab } from "@/components/lists/lists-screen";
 import type { ShoppingRowData } from "@/components/lists/shopping-panel";
@@ -11,6 +10,7 @@ import { choreSections, filterChores, type ChoreFilter } from "@/lib/lists/chore
 import { suggestItems } from "@/lib/lists/suggest";
 import type { CatalogEntry, Chore, DayKey, ShoppingItem, Together } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
+import { TEMP, type Optimistic } from "../_lib/optimistic";
 import { useChores } from "../_lib/use-chores";
 
 export interface ListsViewData {
@@ -23,13 +23,14 @@ export interface ListsViewData {
 }
 
 function useShopping(initial: ShoppingItem[], catalog: CatalogEntry[], together: Together) {
-  const [items, setItems] = useState(initial);
+  const [items, setItems] = useState<Optimistic<ShoppingItem>[]>(initial);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const label = (i: ShoppingItem) => (i.quantity > 1 ? `${i.name}  ×${i.quantity}` : i.name);
-  const row = (i: ShoppingItem): ShoppingRowData => ({
+  const row = (i: Optimistic<ShoppingItem>): ShoppingRowData => ({
     id: i.id,
+    key: i.clientKey ?? i.id,
     label: label(i),
     done: i.done,
     addedBy: together.members.find((m) => m.id === i.addedBy) ?? null,
@@ -41,7 +42,7 @@ function useShopping(initial: ShoppingItem[], catalog: CatalogEntry[], together:
     setQuery("");
     setError(null);
     // optimistic: show it straight away under a temporary id
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `${TEMP}${Date.now()}`;
     setItems((is) => [{ id: tempId, name: trimmed, quantity: 1, addedBy: together.meId, done: false }, ...is]);
     const result = await addShoppingItem(trimmed);
     if (!result.data) {
@@ -50,7 +51,7 @@ function useShopping(initial: ShoppingItem[], catalog: CatalogEntry[], together:
       return;
     }
     const saved = result.data;
-    setItems((is) => is.map((i) => (i.id === tempId ? saved : i)));
+    setItems((is) => is.map((i) => (i.id === tempId ? { ...saved, clientKey: tempId } : i)));
   }
 
   async function onDoneChange(id: string, done: boolean) {
@@ -91,14 +92,12 @@ const EMPTY_DRAFT = (meId: string): ChoreDraft => ({ title: "", due: null, repea
 
 export function useListsViewModel(data: ListsViewData) {
   const { together, today } = data;
-  const router = useRouter();
   const [tab, setTab] = useState<ListsTab>(data.tab);
   const shopping = useShopping(data.shopping, data.catalog, together);
   const { chores, error: choresError, toggle, add } = useChores(data.chores);
   const [filter, setFilter] = useState<ChoreFilter>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draft, setDraft] = useState<ChoreDraft>(() => EMPTY_DRAFT(together.meId));
-  const [adding, setAdding] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
 
   const partner = together.members.find((m) => m.id !== together.meId);
@@ -124,23 +123,28 @@ export function useListsViewModel(data: ListsViewData) {
   ];
 
   async function onSubmit() {
-    setAdding(true);
+    const title = draft.title.trim();
+    if (!title) return setSheetError("Give the chore a name.");
+    if (draft.assignees.length === 0) return setSheetError("Pick who it's for.");
+    // optimistic: close the sheet and show the chore straight away; if saving fails, reopen it with the draft
+    const submitted = draft;
     setSheetError(null);
-    const okay = await add({ title: draft.title, due: draft.due, repeat: draft.repeat, assignees: draft.assignees });
-    setAdding(false);
-    if (!okay) {
-      setSheetError("Couldn't add that chore. Check the title and who it's for.");
-      return;
-    }
     setSheetOpen(false);
     setDraft(EMPTY_DRAFT(together.meId));
+    const okay = await add({ title, due: submitted.due, repeat: submitted.repeat, assignees: submitted.assignees });
+    if (!okay) {
+      setDraft(submitted);
+      setSheetError("Couldn't add that chore. Try again.");
+      setSheetOpen(true);
+    }
   }
 
   return {
     tab,
     onTabChange: (t: ListsTab) => {
       setTab(t);
-      router.replace(t === "chores" ? "/lists?tab=chores" : "/lists", { scroll: false });
+      // keep the tab in the URL without asking the server for the page again
+      window.history.replaceState(null, "", t === "chores" ? "/lists?tab=chores" : "/lists");
     },
     shopping,
     chores: {
@@ -161,7 +165,7 @@ export function useListsViewModel(data: ListsViewData) {
       customDueLabel: draft.due ? dueLabel(draft.due, today) : null,
       members: together.members,
       onSubmit: () => void onSubmit(),
-      pending: adding,
+      pending: false,
       error: sheetError,
     },
   };

@@ -18,6 +18,21 @@ export interface StubState {
   nextId: number;
 }
 
+type SeedPlace = Omit<Place, "googleRating" | "photoUrl"> & Partial<Pick<Place, "googleRating" | "photoUrl">>;
+
+/** a stand-in "photo" so the stub shows how places with a Google photo look (the real one comes from Google) */
+const STUB_PHOTO =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x2="0" y2="1">` +
+      `<stop offset="0" stop-color="#8fb8de"/><stop offset=".6" stop-color="#f3c9a5"/><stop offset="1" stop-color="#2f4858"/>` +
+      `</linearGradient></defs><rect width="400" height="300" fill="url(#g)"/>` +
+      `<path d="M0 230 L90 170 L150 205 L240 140 L330 190 L400 160 V300 H0Z" fill="#3d5a6c"/></svg>`,
+  );
+
+const withGoogle = (places: SeedPlace[]): Place[] =>
+  places.map((p) => ({ googleRating: null, photoUrl: null, ...p }));
+
 export function seed(today = todayKey()): StubState {
   const d = (days: number) => addDays(today, days);
   return {
@@ -70,9 +85,10 @@ export function seed(today = todayKey()): StubState {
       { id: "e-6", title: "Weekend away", day: d(18), time: null, location: "Paternoster", attendees: [BRANDON.id, ADELE.id] },
       { id: "e-7", title: "Dentist", day: d(24), time: "09:15", location: null, attendees: [BRANDON.id] },
     ],
-    places: [
+    places: withGoogle([
       {
         id: "p-1", name: "Nobu", category: "Japanese", area: "Sea Point", status: "been", hue: "accent",
+        googleRating: 4.6, photoUrl: STUB_PHOTO,
         mapsUrl: "https://www.google.com/maps/place/Nobu+Cape+Town",
         ratings: { [BRANDON.id]: 4.5, [ADELE.id]: 5 },
         visits: [
@@ -100,7 +116,7 @@ export function seed(today = todayKey()): StubState {
       { id: "p-6", name: "Paternoster beach walk", category: "Day trip", area: "West Coast", status: "want", hue: "partner", mapsUrl: null, ratings: {}, visits: [] },
       { id: "p-7", name: "Zeitz MOCAA", category: "Museum", area: "Waterfront", status: "want", hue: "success", mapsUrl: null, ratings: {}, visits: [] },
       { id: "p-8", name: "Jason Bakery", category: "Bakery", area: "Bree Street", status: "want", hue: "warning", mapsUrl: null, ratings: {}, visits: [] },
-    ],
+    ]),
     wishes: [
       { id: "w-1", ownerId: BRANDON.id, name: "Pour-over set", price: 650, url: null, claimedBy: ADELE.id, hue: "accent" },
       { id: "w-2", ownerId: BRANDON.id, name: "Running shoes", price: 2100, url: null, claimedBy: null, hue: "partner" },

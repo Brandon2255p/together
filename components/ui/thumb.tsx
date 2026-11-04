@@ -1,5 +1,6 @@
 import { StarIcon } from "lucide-react";
 import type { Hue } from "@/lib/models";
+import { Photo } from "@/components/ui/photo";
 import { cn } from "@/lib/utils";
 
 const GRADIENTS: Record<Hue, string> = {
@@ -9,26 +10,30 @@ const GRADIENTS: Record<Hue, string> = {
   warning: "from-[#e59e2e] to-[#ffe1ad]",
 };
 
-/** A soft gradient tile standing in for a photo (places, wishes) */
+/** A photo tile, or a soft gradient with an icon standing in for one (places, wishes) */
 export function Thumb({
   hue,
   icon,
+  src,
   className,
 }: {
   hue: Hue;
   icon: React.ReactNode;
+  /** the photo; the gradient shows while it loads and if there's none */
+  src?: string | null;
   className?: string;
 }) {
   return (
     <span
       aria-hidden
       className={cn(
-        "grid size-[68px] shrink-0 place-items-center rounded-[18px] bg-linear-135 text-on-accent [&_svg]:size-6",
+        "relative grid size-[68px] shrink-0 place-items-center overflow-hidden rounded-[18px] bg-linear-135 text-on-accent [&_svg]:size-6",
         GRADIENTS[hue],
         className
       )}
     >
       {icon}
+      {src ? <Photo src={src} sizes="68px" /> : null}
     </span>
   );
 }

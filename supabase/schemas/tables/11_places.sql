@@ -1,4 +1,6 @@
 -- Places you've been or want to go. Logging a visit flips status to been (triggers/mark_place_visited.sql).
+-- The google_* columns come from the Google Places API when the place was saved from a Maps link (null otherwise):
+-- the place id, its Google rating, and the resource name of its first photo (served through /api/places/<id>/photo).
 
 create table public.places (
   id uuid primary key default gen_random_uuid(),
@@ -7,6 +9,9 @@ create table public.places (
   category text not null default '' check (char_length(category) <= 40),
   area text not null default '' check (char_length(area) <= 60),
   maps_url text check (maps_url ~ '^https://'),
+  google_place_id text check (char_length(google_place_id) between 1 and 300),
+  google_rating numeric(2, 1) check (google_rating between 1 and 5),
+  google_photo text check (google_photo ~ '^places/[^/]+/photos/[^/]+$'),
   status public.place_status not null default 'want',
   hue public.hue not null default 'accent',
   created_by uuid default auth.uid() references public.profiles (id) on delete set null,

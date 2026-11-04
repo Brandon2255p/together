@@ -28,6 +28,7 @@ docker run -p 3000:3000 -e USE_STUB_DATABASE=true together
 | `SUPABASE_URL` | runtime | Where the **server** reaches Kong, e.g. `http://supabase-kong:8000`. Falls back to `NEXT_PUBLIC_SUPABASE_URL`. |
 | `NEXT_PUBLIC_USE_STUB_DATABASE` | **build arg** and runtime | `false` in production |
 | `USE_STUB_DATABASE` | runtime | `false` in production |
+| `GOOGLE_MAPS_API_KEY` | runtime, optional | A Google Cloud API key with the **Places API (New)** enabled. Fills in a place's category, Google rating and photo when it's saved from a Maps link. Server only, never sent to the browser. Restrict it to the Places API (New) in the Cloud console. Without it, places keep what the link says. |
 
 `NEXT_PUBLIC_*` values are compiled into the browser bundle, so changing them means **rebuilding**, not just
 restarting. They're public by design. No secrets are needed at build time, and `.env*` files are excluded from the

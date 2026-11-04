@@ -39,13 +39,21 @@ export function useWishlistViewModel(data: WishlistViewData) {
     claimedByMe: own ? null : w.claimedBy === together.meId,
   });
 
+  /** optimistic: flips straight away, puts it back if the server says no (someone else got there first) */
   async function onClaimChange(id: string, claimed: boolean) {
+    if (pendingIds.includes(id)) return;
+    const before = partners.find((w) => w.id === id)?.claimedBy ?? null;
+    const setClaimedBy = (claimedBy: string | null) =>
+      setPartners((ws) => ws.map((w) => (w.id === id ? { ...w, claimedBy } : w)));
     setPendingIds((p) => [...p, id]);
     setError(null);
+    setClaimedBy(claimed ? together.meId : null);
     const result = await setWishClaimed(id, claimed);
     setPendingIds((p) => p.filter((x) => x !== id));
-    if (!result.success) return setError(result.error ?? "Couldn't save that.");
-    setPartners((ws) => ws.map((w) => (w.id === id ? { ...w, claimedBy: claimed ? together.meId : null } : w)));
+    if (!result.success) {
+      setClaimedBy(before);
+      setError(result.error ?? "Couldn't save that.");
+    }
   }
 
   return {

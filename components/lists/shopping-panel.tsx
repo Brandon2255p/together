@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 
 export interface ShoppingRowData {
   id: string;
+  /** stays the same when an optimistic row is swapped for the saved one, so it doesn't animate out and back in */
+  key?: string;
   label: string;
   done: boolean;
   addedBy: Member | null;
@@ -39,7 +41,7 @@ function Rows({ rows, onDoneChange }: { rows: ShoppingRowData[]; onDoneChange: S
     <ul className="flex flex-col gap-2">
       <AnimatePresence initial={false} mode="popLayout">
         {rows.map((row) => (
-          <ListItem key={row.id}>
+          <ListItem key={row.key ?? row.id}>
             <TaskRow
               title={row.label}
               done={row.done}

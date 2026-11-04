@@ -76,7 +76,7 @@ export function HomeScreen(props: HomeScreenProps) {
           <ul className="flex flex-col gap-2">
             <AnimatePresence initial={false}>
               {dueToday.map((row) => (
-                <ListItem key={row.id}>
+                <ListItem key={row.key ?? row.id}>
                   <ChoreRow row={row} onDoneChange={onChoreDoneChange} />
                 </ListItem>
               ))}
