@@ -13,6 +13,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { TextField } from "@/components/ui/text-field";
 import { cn } from "@/lib/utils";
 import { TONE_COLORS } from "./bubble-palette";
+import { OpeningOverlay } from "./together-skeletons";
 
 const BubbleScene = dynamic(() => import("@/components/together/bubble-scene"), { ssr: false, loading: () => null });
 
@@ -63,9 +64,11 @@ function FlatBubble({ bubble, onPick, opening }: { bubble: Bubble; onPick: (id: 
 export function TogethersScreen(props: TogethersScreenProps) {
   const { back, bubbles, extent, opening, onPick, sheet, onSheetChange, pending, error } = props;
   const reduced = useReducedMotion();
+  const openingBubble = bubbles.find((b) => b.id === opening);
 
   return (
     <div className="flex flex-col gap-5">
+      {openingBubble ? <OpeningOverlay name={openingBubble.name} colors={TONE_COLORS[openingBubble.tone]} /> : null}
       <Link href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface", size: "md" })}>
         <ChevronLeftIcon aria-hidden />
       </Link>

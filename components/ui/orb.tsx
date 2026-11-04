@@ -8,13 +8,15 @@ const PALETTES = {
   together: ["#ff6b4a", "#6c7bff", "#ffc7a8"],
   warm: ["#ff6b4a", "#ffb08f", "#ffd9c2"],
   cool: ["#6c7bff", "#a3acff", "#ffc7a8"],
+  /** warm greys for loading skeletons: shaped like what's coming, without colour */
+  mist: ["#ddd3c8", "#ece5dd", "#f6f1eb"],
 } as const satisfies Record<string, readonly [string, string, string]>;
 
 export type OrbPalette = keyof typeof PALETTES;
 
 /** The static look: what shows while three.js loads, and instead of it when motion is reduced */
-function OrbFallback({ palette }: { palette: OrbPalette }) {
-  const [a, b] = PALETTES[palette];
+function OrbFallback({ colors }: { colors: readonly [string, string, string] }) {
+  const [a, b] = colors;
   return (
     <div
       className="size-full rounded-full"
@@ -34,22 +36,25 @@ const OrbScene = dynamic(() => import("@/components/ui/orb-scene"), {
  */
 export function Orb({
   palette = "together",
+  colors,
   speed = 1,
   blur = true,
   className,
 }: {
   palette?: OrbPalette;
+  /** your own three colours instead of a palette (a Together's tone) */
+  colors?: readonly [string, string, string];
   speed?: number;
   /** soften it into a glow (the Figma look) */
   blur?: boolean;
   className?: string;
 }) {
   const reduced = useReducedMotion();
-  const [a, b, c] = PALETTES[palette];
+  const [a, b, c] = colors ?? PALETTES[palette];
   return (
     <div aria-hidden className={cn("pointer-events-none relative", blur && "blur-2xl", className)}>
       <div className="absolute inset-0 opacity-60">
-        <OrbFallback palette={palette} />
+        <OrbFallback colors={[a, b, c]} />
       </div>
       {reduced ? null : (
         <div className="absolute inset-0">

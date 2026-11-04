@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
-import { ChevronLeftIcon, CopyIcon, LogOutIcon, ShareIcon, UserPlusIcon } from "lucide-react";
+import { ChevronLeftIcon, CopyIcon, HeartIcon, LogOutIcon, PencilIcon, ShareIcon, UserPlusIcon } from "lucide-react";
 import type { Member } from "@/lib/models";
 import { MemberRow } from "@/components/together/member-row";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { iconButtonVariants } from "@/components/ui/icon-button";
 import { InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
 import { ListItem, Reveal, RevealItem } from "@/components/ui/motion";
 import { Sheet } from "@/components/ui/sheet";
+import { TextField } from "@/components/ui/text-field";
 
 export interface MemberRowData {
   member: Member;
@@ -62,6 +64,11 @@ export interface TogetherScreenProps {
   invite: InviteSheetData | null;
   onInviteClose: () => void;
   onNewCode: () => void;
+  /** the rename sheet: its draft name while open */
+  rename: { open: boolean; value: string; pending: boolean };
+  onRenameOpenChange: (open: boolean) => void;
+  onRenameValueChange: (value: string) => void;
+  onRename: () => void;
   error: string | null;
 }
 
@@ -76,7 +83,16 @@ export function TogetherScreen(props: TogetherScreenProps) {
         </Link>
       </RevealItem>
       <RevealItem>
-        <ScreenHeader eyebrow={summary} title={name} />
+        <ScreenHeader
+          eyebrow={summary}
+          title={name}
+          actions={
+            <Button variant="soft" size="sm" onClick={() => props.onRenameOpenChange(true)}>
+              <PencilIcon className="size-3.5" aria-hidden />
+              Rename
+            </Button>
+          }
+        />
       </RevealItem>
 
       <InlineError>{props.error}</InlineError>
@@ -141,6 +157,7 @@ export function TogetherScreen(props: TogetherScreenProps) {
       <MemberActionsSheet {...props} />
       <InviteSheet {...props} />
       <LeaveSheet {...props} />
+      <RenameSheet {...props} />
     </Reveal>
   );
 }
@@ -244,6 +261,41 @@ function LeaveSheet({ name, leave, onLeaveOpenChange, onLeave, error }: Together
         </Button>
         <InlineError>{error}</InlineError>
       </div>
+    </Sheet>
+  );
+}
+
+function RenameSheet({ rename, onRenameOpenChange, onRenameValueChange, onRename, error }: TogetherScreenProps) {
+  const input = useRef<HTMLInputElement>(null);
+  // select the old name once the sheet has settled (it moves focus itself), so typing replaces it
+  useEffect(() => {
+    if (!rename.open) return;
+    const timer = setTimeout(() => input.current?.select(), 350);
+    return () => clearTimeout(timer);
+  }, [rename.open]);
+  return (
+    <Sheet open={rename.open} onOpenChange={onRenameOpenChange} title="Rename this Together">
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onRename();
+        }}
+      >
+        <TextField
+          label="Name"
+          icon={<HeartIcon aria-hidden />}
+          maxLength={60}
+          ref={input}
+          value={rename.value}
+          onChange={(e) => onRenameValueChange(e.target.value)}
+        />
+        <p className="text-caption text-ink-muted">Everyone in it sees the new name.</p>
+        <InlineError>{error}</InlineError>
+        <Button type="submit" block pending={rename.pending} disabled={!rename.value.trim()}>
+          Save
+        </Button>
+      </form>
     </Sheet>
   );
 }

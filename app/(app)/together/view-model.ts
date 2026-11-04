@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { leaveTogether, newInviteCode, removeMember, setMemberRole } from "@/lib/actions/together";
+import { leaveTogether, newInviteCode, removeMember, renameTogether, setMemberRole } from "@/lib/actions/together";
 import type { Member, Together } from "@/lib/models";
 import { codeBoxes, expiryLabel, inviteMessage, isExpired, joinUrl, spacedCode } from "@/lib/together/invite";
 import type { MemberRowData } from "@/components/together/together-screen";
@@ -19,6 +19,8 @@ export function useTogetherViewModel(initial: Together) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [draftName, setDraftName] = useState(initial.name);
   const [pending, setPending] = useState(false);
   // the clock for expiry labels; read after mount so server and client render the same
   const [now, setNow] = useState<number | null>(null);
@@ -138,6 +140,25 @@ export function useTogetherViewModel(initial: Together) {
     setTogether((t) => ({ ...t, inviteCode: fresh.code, inviteExpiresAt: fresh.expiresAt }));
   }
 
+  async function rename() {
+    const name = draftName.trim();
+    if (pending || !name) return;
+    if (name === together.name) return setRenameOpen(false);
+    const before = together.name;
+    setPending(true);
+    setError(null);
+    setTogether((t) => ({ ...t, name }));
+    const result = await renameTogether(name);
+    setPending(false);
+    if (!result.success) {
+      setTogether((t) => ({ ...t, name: before }));
+      return setError(result.error ?? "We couldn't rename it. Try again.");
+    }
+    setRenameOpen(false);
+    // Home's pill and the switcher show the name too
+    router.refresh();
+  }
+
   async function leave() {
     if (pending) return;
     setPending(true);
@@ -209,6 +230,17 @@ export function useTogetherViewModel(initial: Together) {
       : null,
     onInviteClose: () => setInviteOpen(false),
     onNewCode: () => void renewCode(),
+    rename: { open: renameOpen, value: draftName, pending },
+    onRenameOpenChange: (open: boolean) => {
+      setError(null);
+      if (open) setDraftName(together.name);
+      setRenameOpen(open);
+    },
+    onRenameValueChange: (value: string) => {
+      setDraftName(value);
+      setError(null);
+    },
+    onRename: () => void rename(),
     error,
   };
 }

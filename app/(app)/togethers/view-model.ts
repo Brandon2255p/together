@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { createTogether, joinTogether, switchTogether } from "@/lib/actions/together";
@@ -19,6 +19,11 @@ export function useTogethersViewModel(togethers: TogetherSummary[]) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Home is where every pick lands: load it ahead so the switch doesn't wait on it
+  useEffect(() => {
+    router.prefetch("/home");
+  }, [router]);
+
   function goHome() {
     router.push("/home");
     router.refresh();
@@ -26,9 +31,10 @@ export function useTogethersViewModel(togethers: TogetherSummary[]) {
 
   async function pick(id: string) {
     if (opening) return;
-    if (togethers.find((t) => t.id === id)?.current) return goHome();
+    // answer the tap straight away (the screen shows the opening overlay), then switch and go
     setOpening(id);
     setError(null);
+    if (togethers.find((t) => t.id === id)?.current) return goHome();
     const result = await switchTogether(id);
     if (!result.success) {
       setOpening(null);

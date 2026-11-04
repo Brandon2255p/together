@@ -27,7 +27,8 @@ export function AppShell({ active, tabBar = true, children }: { active: AppTab |
   }
   return (
     <div className="mx-auto min-h-dvh max-w-[440px]">
-      <div className="px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-36">{children}</div>
+      {/* clears the fade and the tab bar below (about 180px), so the last button on a page is never under them */}
+      <div className="px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[calc(12.5rem+env(safe-area-inset-bottom))]">{children}</div>
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[440px]">
         <div className="h-24 bg-linear-to-b from-bg/0 to-bg" />
         <div className="pointer-events-auto bg-bg px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">

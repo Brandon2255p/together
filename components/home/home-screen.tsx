@@ -5,6 +5,7 @@ import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
 import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, UserRoundIcon } from "lucide-react";
 import type { Member, MemberTone } from "@/lib/models";
+import { ManagePill } from "@/components/together/manage-pill";
 import { SwitcherPill } from "@/components/together/switcher-pill";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
 import { AvatarStack } from "@/components/ui/avatar";
@@ -45,19 +46,17 @@ export function HomeScreen(props: HomeScreenProps) {
   return (
     <Reveal className="flex flex-col gap-5">
       <RevealItem className="flex flex-col gap-3">
-        <SwitcherPill {...switcher} href={links.togethers} className="self-start" />
+        <div className="flex flex-wrap items-center gap-2">
+          <SwitcherPill {...switcher} href={links.togethers} className="min-w-0" />
+          <ManagePill name={switcher.name} members={members} href={links.together} />
+        </div>
         <ScreenHeader
           eyebrow={dateLabel}
           title={greeting}
           actions={
-            <>
-              <Link href={links.together} aria-label={`Who's in ${switcher.name}`} className="rounded-full transition-transform active:scale-95">
-                <AvatarStack members={members.slice(0, 4)} size="lg" />
-              </Link>
-              <Link href={links.profile} aria-label="You: your name and signing out" className={iconButtonVariants({ variant: "surface", size: "sm" })}>
-                <UserRoundIcon aria-hidden />
-              </Link>
-            </>
+            <Link href={links.profile} aria-label="You: your name and signing out" className={iconButtonVariants({ variant: "surface", size: "sm" })}>
+              <UserRoundIcon aria-hidden />
+            </Link>
           }
         />
       </RevealItem>
