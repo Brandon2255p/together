@@ -17,3 +17,4 @@ volumes
 Dockerfile
 docker-compose*.yml
 .DS_Store
+ts

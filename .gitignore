@@ -8,3 +8,6 @@ build
 next-env.d.ts
 .DS_Store
 .vercel
+
+# Tailscale node state (private keys)
+ts/

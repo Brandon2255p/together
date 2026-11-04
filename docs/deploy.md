@@ -23,8 +23,9 @@ docker run -p 3000:3000 -e USE_STUB_DATABASE=true together
 
 | Variable | When | Value |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | **build arg** and runtime | Kong's public URL, e.g. `https://supabase.example.com` |
+| `NEXT_PUBLIC_SUPABASE_URL` | **build arg** and runtime | Where the **browser** reaches Kong, e.g. `https://together-supabase.tail1234.ts.net` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | **build arg** and runtime | The anon key |
+| `SUPABASE_URL` | runtime | Where the **server** reaches Kong, e.g. `http://supabase-kong:8000`. Falls back to `NEXT_PUBLIC_SUPABASE_URL`. |
 | `NEXT_PUBLIC_USE_STUB_DATABASE` | **build arg** and runtime | `false` in production |
 | `USE_STUB_DATABASE` | runtime | `false` in production |
 
@@ -32,22 +33,46 @@ docker run -p 3000:3000 -e USE_STUB_DATABASE=true together
 restarting. They're public by design. No secrets are needed at build time, and `.env*` files are excluded from the
 build context.
 
-The app talks to Supabase through Kong's **public** URL, both from the browser and from the server. The auth cookie's
-name is derived from that URL, so the two sides have to agree on it.
+The browser and the server can reach Supabase at different addresses. The auth cookie has a fixed name,
+`sb-together-auth-token`, set in `lib/supabase/config.ts`, so both still share one session. `@supabase/ssr` would
+otherwise name the cookie after the URL's hostname.
 
-## Coolify (self-hosted Supabase)
+## Coolify (self-hosted Supabase) over Tailscale
 
-`docker-compose.yml` is your Supabase stack plus a `together` service:
+`docker-compose.yml` is your Supabase stack, plus the app, plus two Tailscale sidecars. Together is private to your
+tailnet: nothing is exposed with Funnel.
 
-- **`together`**:
-  - Built from the repo's `Dockerfile`.
-  - Gets its build args from Coolify's generated `SERVICE_URL_SUPABASEKONG` and `SERVICE_SUPABASEANON_KEY`.
-  - Starts once Kong and Auth are healthy.
-  - `SERVICE_URL_TOGETHER_3000` asks Coolify to route a domain to it. Set it to `https://together.openprocess.me` in
-    the service's settings.
-- **`supabase-auth`**: `GOTRUE_SITE_URL` now defaults to the app's URL (`SERVICE_URL_TOGETHER`) instead of Kong's, so
-  auth emails point at Together.
-- **Named volumes** are declared at the bottom, so the file is valid for plain Docker Compose too.
+```
+browser on the tailnet
+  ├─ https://together.<tailnet>           → ts-together          → together:3000       (the app)
+  └─ https://together-supabase.<tailnet>  → ts-together-supabase → supabase-kong:8000  (auth, REST, realtime, storage)
+
+together (Next.js server) → http://supabase-kong:8000, on the compose network
+```
+
+A browser only needs those two addresses. Everything else stays on the compose network: Studio, Postgres, the pooler,
+Meta, analytics and storage internals. The sidecars use the same serve setup as spacebot: TLS on 443 with a
+`ts.net` certificate, and a proxy to the target. The difference is that each one proxies to another container by its
+service name, not to `127.0.0.1`. That way `together` and Kong stay on the normal compose network, and Coolify's
+own routes keep working if you also want public domains.
+
+| Service | Does |
+|---|---|
+| `together` | The app, built from the `Dockerfile`. Starts once Kong and Auth are healthy. |
+| `ts-together` | Tailscale node `together`. Serves the app on the tailnet. |
+| `ts-together-supabase` | Tailscale node `together-supabase`. Serves Kong on the tailnet. |
+| `supabase-auth` | `GOTRUE_SITE_URL` points at the app's tailnet URL and `API_EXTERNAL_URL` at Kong's, so auth links work from the tailnet. |
+
+Tailscale variables:
+
+| Variable | Value |
+|---|---|
+| `TS_AUTHKEY` | A **reusable** auth key, since both sidecars use it. Tag it (e.g. `tag:together`) so the nodes don't expire with your user. |
+| `TS_TAILNET` | Your tailnet's MagicDNS suffix, e.g. `tail1234.ts.net`. The URLs above are built from it. |
+| `PUBLIC_SUPABASE_URL`, `PUBLIC_APP_URL` | Optional. Set them to override the tailnet URLs, e.g. to use Coolify's public domains. |
+
+Each sidecar keeps its node identity in `./ts/<name>/state`. That directory holds private keys, and it's gitignored.
+HTTPS and MagicDNS must be on for the tailnet (in the Tailscale admin, under DNS).
 
 Steps:
 
@@ -61,13 +86,13 @@ Steps:
    - `entrypoint.sh`
 
    Coolify's Supabase template provides these. They aren't in this repo.
-3. Set the domains:
-   - `together` → `https://together.openprocess.me`
-   - `supabase-kong` → your Supabase API domain
+3. Set `TS_AUTHKEY` and `TS_TAILNET`.
 4. Set `USE_STUB_DATABASE=false`. Leave it unset to get the same default.
 5. Configure SMTP (`SMTP_*`) so sign-in codes can be emailed. Make the magic-link template send `{{ .Token }}`
    (`MAILER_TEMPLATES_MAGIC_LINK`), so users get a 6-digit code.
 6. Apply the schema to the database (below), then deploy.
+7. Open `https://together.<tailnet>` from a device on the tailnet. The first request to each node can take a few
+   seconds while it gets its certificate.
 
 ### Applying the schema
 
