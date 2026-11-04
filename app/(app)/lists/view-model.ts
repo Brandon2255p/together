@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { ChoreDraft } from "@/components/lists/add-chore-sheet";
 import type { ListsTab } from "@/components/lists/lists-screen";
 import type { ItemDraft } from "@/components/lists/item-sheet";
 import type { ShoppingRowData } from "@/components/lists/shopping-panel";
@@ -12,13 +11,13 @@ import {
   setShoppingItemDone,
   updateShoppingItem,
 } from "@/lib/actions/lists";
-import { addDays, dueLabel } from "@/lib/format";
 import { choreSections, filterChores, type ChoreFilter } from "@/lib/lists/chores";
 import { suggestItems } from "@/lib/lists/suggest";
 import type { CatalogEntry, Chore, DayKey, ShoppingItem, Together } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
 import { TEMP, type Optimistic } from "../_lib/optimistic";
 import { useServerState } from "../_lib/server-state";
+import { useChoreSheet } from "../_lib/use-chore-sheet";
 import { useChores } from "../_lib/use-chores";
 
 export interface ListsViewData {
@@ -151,19 +150,14 @@ function useShopping(initial: ShoppingItem[], catalog: CatalogEntry[], together:
   };
 }
 
-const EMPTY_DRAFT = (meId: string): ChoreDraft => ({ title: "", due: null, repeat: "once", assignees: [meId] });
-
 export function useListsViewModel(data: ListsViewData) {
   const { together, today } = data;
   const [tab, setTab] = useState<ListsTab>(data.tab);
   const shopping = useShopping(data.shopping, data.catalog, together);
-  const { chores, error: choresError, toggle, add, update, remove } = useChores(data.chores);
+  const store = useChores(data.chores);
+  const { chores, error: choresError, toggle } = store;
+  const choreSheet = useChoreSheet(together, today, store);
   const [filter, setFilter] = useState<ChoreFilter>("all");
-  const [sheetOpen, setSheetOpen] = useState(false);
-  // the chore open in the sheet; null when adding a new one
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ChoreDraft>(() => EMPTY_DRAFT(together.meId));
-  const [sheetError, setSheetError] = useState<string | null>(null);
 
   const partner = together.members.find((m) => m.id !== together.meId);
   const filters: { value: ChoreFilter; label: string }[] = [
@@ -177,60 +171,6 @@ export function useListsViewModel(data: ListsViewData) {
     title: s.title,
     rows: s.chores.map((c) => toChoreRow(c, together.members, today)),
   }));
-
-  // weekend: the next Saturday
-  const saturday = addDays(today, (6 - new Date(`${today}T00:00:00Z`).getUTCDay() + 7) % 7 || 7);
-  const dueOptions = [
-    { value: null, label: "No date" },
-    { value: today, label: "Today" },
-    { value: addDays(today, 1), label: "Tomorrow" },
-    { value: saturday, label: "Weekend" },
-  ];
-
-  async function onSubmit() {
-    const title = draft.title.trim();
-    if (!title) return setSheetError("Give the chore a name.");
-    if (draft.assignees.length === 0) return setSheetError("Pick who it's for.");
-    // optimistic: close the sheet and show the chore straight away; if saving fails, reopen it with the draft
-    const submitted = draft;
-    const id = editingId;
-    setSheetError(null);
-    setSheetOpen(false);
-    const chore = { title, due: submitted.due, repeat: submitted.repeat, assignees: submitted.assignees };
-    const okay = id ? await update(id, chore) : await add(chore);
-    if (!okay) {
-      setEditingId(id);
-      setDraft(submitted);
-      setSheetError(id ? "Couldn't save that chore. Try again." : "Couldn't add that chore. Try again.");
-      setSheetOpen(true);
-    }
-  }
-
-  function openAdd() {
-    // coming from an edit: start a fresh draft
-    if (editingId) setDraft(EMPTY_DRAFT(together.meId));
-    setEditingId(null);
-    setSheetError(null);
-    setSheetOpen(true);
-  }
-
-  function openEdit(id: string) {
-    const chore = chores.find((c) => c.id === id);
-    if (!chore || id.startsWith(TEMP)) return;
-    setEditingId(id);
-    setDraft({ title: chore.title, due: chore.due, repeat: chore.repeat, assignees: chore.assignees });
-    setSheetError(null);
-    setSheetOpen(true);
-  }
-
-  async function onDelete() {
-    if (!editingId) return;
-    const id = editingId;
-    setSheetOpen(false);
-    setEditingId(null);
-    setDraft(EMPTY_DRAFT(together.meId));
-    await remove(id);
-  }
 
   return {
     tab,
@@ -246,23 +186,10 @@ export function useListsViewModel(data: ListsViewData) {
       onFilterChange: setFilter,
       sections,
       onDoneChange: (id: string, done: boolean) => void toggle(id, done),
-      onOpen: openEdit,
-      onAddPress: openAdd,
+      onOpen: choreSheet.openEdit,
+      onAddPress: choreSheet.openAdd,
       error: choresError,
     },
-    addChore: {
-      open: sheetOpen,
-      onOpenChange: setSheetOpen,
-      draft,
-      onDraftChange: (patch: Partial<ChoreDraft>) => setDraft((d) => ({ ...d, ...patch })),
-      dueOptions,
-      customDueLabel: draft.due ? dueLabel(draft.due, today) : null,
-      members: together.members,
-      onSubmit: () => void onSubmit(),
-      pending: false,
-      error: sheetError,
-      mode: editingId ? ("edit" as const) : ("add" as const),
-      onDelete: () => void onDelete(),
-    },
+    addChore: choreSheet.sheet,
   };
 }

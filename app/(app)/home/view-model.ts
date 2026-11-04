@@ -4,6 +4,7 @@ import type { Route } from "next";
 import { dueLabel, greeting, hourNow, longDate } from "@/lib/format";
 import type { CalendarEvent, Chore, DayKey, Member, Together, TogetherSummary } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
+import { useChoreSheet } from "../_lib/use-chore-sheet";
 import { useChores } from "../_lib/use-chores";
 
 export interface HomeViewData {
@@ -30,7 +31,9 @@ const LINKS = {
 
 export function useHomeViewModel(data: HomeViewData) {
   const { together, today } = data;
-  const { chores, error, toggle } = useChores(data.chores);
+  const choreStore = useChores(data.chores);
+  const { chores, error, toggle } = choreStore;
+  const choreSheet = useChoreSheet(together, today, choreStore);
   const me = together.members.find((m) => m.id === together.meId);
   const people = (ids: string[]) => ids.map((id) => together.members.find((m) => m.id === id)).filter((m): m is Member => !!m);
 
@@ -61,6 +64,8 @@ export function useHomeViewModel(data: HomeViewData) {
     upNext,
     dueToday,
     onChoreDoneChange: (id: string, done: boolean) => void toggle(id, done),
+    onChoreOpen: choreSheet.openEdit,
+    choreSheet: choreSheet.sheet,
     toBuy: data.toBuy,
     wantToGo: data.wantToGo,
     links: LINKS,

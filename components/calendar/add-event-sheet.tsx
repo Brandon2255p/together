@@ -29,6 +29,8 @@ export interface AddEventSheetProps {
   onSubmit: () => void;
   pending: boolean;
   error: string | null;
+  /** "edit" changes an existing plan: Save instead of Add */
+  mode?: "add" | "edit";
 }
 
 const INPUT =
@@ -44,14 +46,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function AddEventSheet(props: AddEventSheetProps) {
-  const { open, onOpenChange, draft, onDraftChange, dayLabel, members, onSubmit, pending, error } = props;
+  const { open, onOpenChange, draft, onDraftChange, dayLabel, members, onSubmit, pending, error, mode = "add" } = props;
+  const editing = mode === "edit";
   const toggle = (id: string) =>
     onDraftChange({
       attendees: draft.attendees.includes(id) ? draft.attendees.filter((a) => a !== id) : [...draft.attendees, id],
     });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} eyebrow="New plan" title={draft.title.trim() || "What's happening?"}>
+    <Sheet open={open} onOpenChange={onOpenChange} eyebrow={editing ? "Edit plan" : "New plan"} title={draft.title.trim() || "What's happening?"}>
       <form
         className="flex flex-col gap-5"
         onSubmit={(e) => {
@@ -62,7 +65,7 @@ export function AddEventSheet(props: AddEventSheetProps) {
         <label className="flex flex-col gap-2.5">
           <span className="text-caption text-ink-muted">What</span>
           <input
-            autoFocus
+            autoFocus={!editing}
             value={draft.title}
             maxLength={120}
             onChange={(e) => onDraftChange({ title: e.target.value })}
@@ -142,7 +145,7 @@ export function AddEventSheet(props: AddEventSheetProps) {
 
         <InlineError>{error}</InlineError>
         <Button type="submit" block pending={pending}>
-          Add to calendar
+          {editing ? "Save" : "Add to calendar"}
         </Button>
       </form>
     </Sheet>

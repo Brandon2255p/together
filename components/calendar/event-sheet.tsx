@@ -1,6 +1,6 @@
 "use client";
 
-import { ClockIcon, MapPinIcon, Trash2Icon } from "lucide-react";
+import { ClockIcon, MapPinIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import type { Member } from "@/lib/models";
 import { AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,15 @@ export interface EventSheetData {
 export function EventSheet({
   event,
   onClose,
+  onEdit,
   onDelete,
   pending,
   error,
 }: {
   event: EventSheetData | null;
   onClose: () => void;
+  /** opens the plan in the add sheet to change it */
+  onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   pending: boolean;
   error: string | null;
@@ -52,6 +55,10 @@ export function EventSheet({
             ) : null}
           </div>
           <InlineError>{error}</InlineError>
+          <Button block onClick={() => onEdit(event.id)}>
+            <PencilIcon className="size-4" aria-hidden />
+            Edit plan
+          </Button>
           <Button block variant="outline" pending={pending} onClick={() => onDelete(event.id)}>
             <Trash2Icon className="size-4" aria-hidden />
             Remove from calendar
