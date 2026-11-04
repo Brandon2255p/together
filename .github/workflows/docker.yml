@@ -65,18 +65,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Every file bind mount has inline content
+        # Coolify doesn't copy the repo to the server. A bind source without `content:` turns into an empty
+        # directory, and the service crashes (that's how Vector failed).
+        run: |
+          yq -e '[.services[].volumes[] | select(tag == "!!map" and .type == "bind" and (.source | test("^\./")) and (has("content") | not)) | .source] | length == 0' docker-compose.yml \
+            || { echo "::error::a ./ bind mount in docker-compose.yml has no content:"; exit 1; }
       - name: docker compose config
-        # Coolify fills SERVICE_* in production; any value will do to check the file parses. exclude_from_hc is a
-        # Coolify-only key that plain Compose rejects, so it's dropped for the check.
+        # Coolify fills SERVICE_* in production; any value will do to check the file parses. exclude_from_hc and
+        # volume `content` are Coolify-only keys that plain Compose rejects, so they're dropped for the check.
         run: |
           for v in $(grep -oE '\$\{[A-Z0-9_]+' docker-compose.yml | tr -d '${' | sort -u); do export "$v=ci"; done
-          grep -v 'exclude_from_hc' docker-compose.yml > /tmp/compose.yml
+          yq 'del(.services[].exclude_from_hc) | del(.services[].volumes[] | select(tag == "!!map") | .content)' docker-compose.yml > /tmp/compose.yml
           docker compose -f /tmp/compose.yml --project-directory . config --quiet
-      - name: Bind-mounted files exist
-        # Compose would silently create a missing bind source as an empty directory, and the service then fails.
-        run: |
-          missing=0
-          for p in $(grep -A1 'source: \./' docker-compose.yml | grep -oE '\./[^ ]+'); do
-            [ -f "$p" ] || { echo "::error::missing $p"; missing=1; }
-          done
-          exit $missing

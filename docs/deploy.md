@@ -81,14 +81,19 @@ HTTPS and MagicDNS must be on for the tailnet (in the Tailscale admin, under DNS
 Steps:
 
 1. Create a Docker Compose resource in Coolify from this repository, using `docker-compose.yml`.
-2. The Supabase support files the compose binds ship in this repo:
-   - `volumes/`: Kong config, database init SQL, Vector, the pooler and the edge-function runtime. These are copied
-     unchanged from [supabase/supabase `docker/volumes`](https://github.com/supabase/supabase/tree/master/docker/volumes)
-     (Apache-2.0).
-   - `entrypoint.sh`: creates the `stub` MinIO bucket that Storage uses.
+2. The Supabase support files are written inline in `docker-compose.yml`, under each bind mount's `content:`:
+   - Kong config
+   - database init SQL
+   - Vector
+   - the pooler
+   - the edge-function runtime
+   - the MinIO bucket script
 
-   CI fails if any bind-mounted file is missing. Without the file, Compose creates an empty directory in its place and
-   the service crashes.
+   These are the files from [Coolify's Supabase template](https://github.com/coollabsio/coolify/blob/v4.x/templates/compose/supabase.yaml),
+   unchanged. They use this compose's service names (`supabase-analytics`, `supabase-auth`…), where upstream
+   Supabase's use `analytics`, `auth` and so on. Coolify doesn't copy the repo to the server. It writes each `content:`
+   to `/data/coolify/applications/<uuid>/…`, and a bind source with no content becomes an empty directory, which made
+   Vector crash. CI fails if any `./` file mount is missing its `content:`.
 3. Set `TS_AUTHKEY`, `PUBLIC_APP_URL` and `PUBLIC_SUPABASE_URL`. Delete any `TS_TAILNET`, `API_EXTERNAL_URL` or
    `GOTRUE_SITE_URL` lines Coolify copied in earlier, since the compose no longer reads them.
 4. Set `USE_STUB_DATABASE=false`. Leave it unset to get the same default.
