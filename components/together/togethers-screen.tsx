@@ -13,6 +13,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { TextField } from "@/components/ui/text-field";
 import { cn } from "@/lib/utils";
 import { TONE_COLORS } from "./bubble-palette";
+import { ballGradient } from "@/components/ui/ball";
 import { OpeningOverlay } from "./together-skeletons";
 
 const BubbleScene = dynamic(() => import("@/components/together/bubble-scene"), { ssr: false, loading: () => null });
@@ -39,7 +40,6 @@ export interface TogethersScreenProps {
 
 /** a bubble without three.js: the same gradient as a flat circle */
 function FlatBubble({ bubble, onPick, opening }: { bubble: Bubble; onPick: (id: string) => void; opening: boolean }) {
-  const [a, b, c] = TONE_COLORS[bubble.tone];
   const size = Math.round(72 + bubble.radius * 56);
   return (
     <button
@@ -50,7 +50,7 @@ function FlatBubble({ bubble, onPick, opening }: { bubble: Bubble; onPick: (id: 
     >
       <span
         className="relative rounded-full"
-        style={{ width: size, height: size, background: `radial-gradient(circle at 35% 30%, ${c}, ${b} 45%, ${a})` }}
+        style={{ width: size, height: size, background: ballGradient(TONE_COLORS[bubble.tone]) }}
       >
         {bubble.hasNews ? <span className="absolute top-1 right-1 size-3 rounded-full bg-accent ring-2 ring-bg" /> : null}
       </span>

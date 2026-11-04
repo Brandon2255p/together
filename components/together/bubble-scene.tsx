@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Bubble } from "@/lib/together/bubbles";
-import { fragmentShader, vertexShader } from "@/components/ui/orb-scene";
+import { ballFragmentShader, ballVertexShader } from "@/components/ui/ball-shader";
 import { TONE_COLORS } from "./bubble-palette";
 
-// Screen 17's cluster: one morphing orb per Together (the orb's shaders), sized by recent activity. Drag spins the
+// Screen 17's cluster: one smooth glossy ball per Together (components/ui/ball-shader.ts), sized by recent activity.
+// Each one floats and breathes gently; the outline never changes shape. Drag spins the
 // cluster; tapping a bubble flies the camera to it, then calls onPick. Labels are DOM, placed over each bubble every
 // frame. Loaded with next/dynamic (no SSR); the screen shows a static grid instead when motion is reduced.
 
@@ -30,21 +31,28 @@ function BubbleMesh({
   const mesh = useRef<THREE.Mesh>(null);
   const material = useRef<THREE.ShaderMaterial>(null);
   const [a, b, c] = TONE_COLORS[bubble.tone];
+  // each bubble starts at a different point in its float and colour drift
+  const phase = bubble.position[0] * 3 + bubble.position[1] * 7;
   const uniforms = useMemo(
     () => ({
-      // each bubble starts at a different point in its wobble
-      uTime: { value: bubble.position[0] * 3 + bubble.position[1] * 7 },
-      uPointer: { value: new THREE.Vector2() },
+      uTime: { value: phase },
       uA: { value: new THREE.Color(a) },
       uB: { value: new THREE.Color(b) },
       uC: { value: new THREE.Color(c) },
     }),
-    [a, b, c, bubble.position]
+    [a, b, c, phase]
   );
+  const scale = bubble.radius / BASE_RADIUS;
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const u = material.current?.uniforms;
     if (u) (u.uTime as THREE.IUniform<number>).value += delta * 0.6;
+    const m = mesh.current;
+    if (!m) return;
+    // a slow float and breath, out of step with the others
+    const t = state.clock.elapsedTime + phase;
+    m.position.y = bubble.position[1] + Math.sin(t * 0.7) * 0.06 * scale;
+    m.scale.setScalar(scale * (1 + Math.sin(t * 1.05) * 0.012));
   });
 
   return (
@@ -52,7 +60,7 @@ function BubbleMesh({
       ref={mesh}
       name={bubble.id}
       position={bubble.position}
-      scale={bubble.radius / BASE_RADIUS}
+      scale={scale}
       onClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
         if (!wasDrag() && mesh.current) onTap(mesh.current);
@@ -60,8 +68,8 @@ function BubbleMesh({
       onPointerOver={() => (document.body.style.cursor = "pointer")}
       onPointerOut={() => (document.body.style.cursor = "")}
     >
-      <icosahedronGeometry args={[BASE_RADIUS, 32]} />
-      <shaderMaterial ref={material} vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniforms} transparent />
+      <sphereGeometry args={[BASE_RADIUS, 96, 64]} />
+      <shaderMaterial ref={material} vertexShader={ballVertexShader} fragmentShader={ballFragmentShader} uniforms={uniforms} />
     </mesh>
   );
 }
@@ -138,16 +146,23 @@ function Cluster({
     }
     cam.lookAt(0, 0, 0);
 
-    // labels follow their bubbles on screen; the nearer ones on top
+    // labels follow their bubbles on screen, wrapped to fit inside them; the nearer ones on top
+    const pxPerUnit = size.height / 2 / Math.tan(THREE.MathUtils.degToRad((cam as THREE.PerspectiveCamera).fov / 2));
     for (const child of g.children) {
       const label = labelFor(child.name);
       if (!label) continue;
       child.getWorldPosition(world);
       const depth = world.distanceTo(cam.position);
+      // the ball's radius on screen, in px
+      const radius = ((child.scale.x * BASE_RADIUS) / depth) * pxPerUnit;
       world.project(cam);
       const x = (world.x * 0.5 + 0.5) * size.width;
       const y = (-world.y * 0.5 + 0.5) * size.height;
       label.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+      // about the widest band of text that sits inside the circle; never so narrow a word won't fit
+      label.style.width = `${Math.max(64, Math.round(radius * 1.55))}px`;
+      // a small ball only has room for its name
+      label.dataset.small = radius < 52 ? "true" : "false";
       label.style.zIndex = String(1000 - Math.round(depth * 10));
       label.style.opacity = world.z < 1 ? "1" : "0";
     }
@@ -194,7 +209,7 @@ export default function BubbleScene({
   return (
     <div className="relative size-full touch-none select-none">
       <Canvas
-        dpr={[1, 1.75]}
+        dpr={[1, 2]}
         camera={{ position: [0, 0, 3 + extent * 2.1], fov: 45 }}
         gl={{ alpha: true, antialias: true, powerPreference: "low-power" }}
         style={{ background: "transparent" }}
@@ -209,15 +224,20 @@ export default function BubbleScene({
               if (el) labels.current.set(b.id, el);
               else labels.current.delete(b.id);
             }}
-            className="absolute top-0 left-0 flex max-w-36 flex-col items-center text-center will-change-transform"
+            className="group absolute top-0 left-0 flex flex-col items-center text-center text-balance will-change-transform"
             style={{ opacity: 0 }}
           >
-            <span className="flex items-center gap-1 text-callout font-semibold text-ink drop-shadow-[0_1px_6px_rgba(255,255,255,0.9)]">
+            <span className="text-callout leading-tight font-semibold text-ink drop-shadow-[0_1px_6px_rgba(255,255,255,0.9)]">
               {b.name}
-              {b.hasNews ? <span className="size-2 rounded-full bg-accent" /> : null}
+              {b.hasNews ? <span className="ml-1 inline-block size-2 rounded-full bg-accent align-middle" /> : null}
             </span>
-            <span className="text-caption text-ink drop-shadow-[0_1px_6px_rgba(255,255,255,0.9)]">
-              {b.current ? "You're here" : b.detail}
+            <span className="mt-0.5 flex flex-col text-caption leading-tight text-ink drop-shadow-[0_1px_6px_rgba(255,255,255,0.9)] group-data-[small=true]:hidden">
+              {/* one part a line ("3 people" / "active 2h ago"): a centred stack sits better in a circle */}
+              {(b.current ? "You're here" : b.detail).split(" · ").map((part, i) => (
+                <span key={i} className="block">
+                  {part}
+                </span>
+              ))}
             </span>
           </div>
         ))}
