@@ -1,7 +1,16 @@
 "use server";
 
 import { serverBackend } from "@/lib/backend/server";
-import type { DataResult, GooglePlaceDetails, NewPlace, Place, PlaceStatus } from "@/lib/models";
+import type {
+  Coordinates,
+  DataResult,
+  GooglePlaceDetails,
+  MutationResult,
+  NewVisit,
+  Place,
+  PlaceStatus,
+  PlaceSuggestion,
+} from "@/lib/models";
 import { kindFromGoogleType } from "@/lib/places/google-types";
 import { isMapsUrl, isShortMapsLink, placeFromMapsUrl, readPlaceInput, UNNAMED_PLACE } from "@/lib/places/maps-link";
 
@@ -32,62 +41,161 @@ export async function getPlaceWithGoogle(id: string): Promise<DataResult<{ place
   return { data: { place, google } };
 }
 
+const SESSION_TOKEN = /^[A-Za-z0-9-]{8,64}$/;
+const GOOGLE_ID = /^[A-Za-z0-9_-]{1,300}$/;
+const MAX_QUERY = 120;
+
+/** Autocomplete for Add a place (21a). Empty for a blank query or a bad token; Google errors come back as []. */
+export async function autocompletePlaces(input: string, sessionToken: string, near: Coordinates | null): Promise<PlaceSuggestion[]> {
+  const text = input.trim().slice(0, MAX_QUERY);
+  if (text.length < 2 || !SESSION_TOKEN.test(sessionToken)) return [];
+  return serverBackend.autocompletePlaces({ input: text, sessionToken, near: validCoordinates(near) });
+}
+
+/** The preview (21b): fresh details with rating, price, hours and photo. Ends the autocomplete session. */
+export async function previewGooglePlace(placeId: string, sessionToken: string | null): Promise<DataResult<GooglePlaceDetails>> {
+  if (!GOOGLE_ID.test(placeId)) return { data: null, error: "We couldn't find that place on Google." };
+  const token = sessionToken && SESSION_TOKEN.test(sessionToken) ? sessionToken : undefined;
+  const google = await serverBackend.getGooglePlace({ placeId, extras: true, sessionToken: token });
+  return google ? { data: google } : { data: null, error: "Google didn't answer. Try again, or add it by hand." };
+}
+
 /**
- * `input`: a Google Maps link, the text the Maps app shares, or just a name (saved as it is: it could be anything,
- * like "Mom's place").
- * A link is followed and read for a name and pin, matched on Google (Text Search, ids only), and saved with Google's
- * name, kind and our address labels (area, city, province, country) plus the place id and coordinates. When Google
- * has no match, it's saved with what the link says.
+ * A pasted Google Maps link (or the text the Maps app shares): followed and read for a name and pin, then matched on
+ * Google (Text Search, ids only). `placeId` when Google has it, else the name the link gave, to add by hand.
  */
-export async function addPlace(input: string, status: PlaceStatus) {
+export async function findPlaceFromMapsLink(input: string): Promise<DataResult<{ placeId: string | null; name: string }>> {
   const parsed = readPlaceInput(input);
-  if (!parsed) return { data: null, error: "Paste a Google Maps link or type the place's name." };
-  if (parsed.kind === "name") return serverBackend.addPlace(byHand(parsed.name, status));
-
+  if (!parsed || parsed.kind !== "link") return { data: null, error: "That isn't a Google Maps link." };
   const resolved = isShortMapsLink(parsed.url) ? ((await followMapsLink(parsed.url)) ?? parsed.url) : parsed.url;
-  const { coordinates, ...details } = placeFromMapsUrl(resolved, parsed.url, parsed.label);
+  const { coordinates, name, area } = placeFromMapsUrl(resolved, parsed.url, parsed.label);
   // a dropped pin has no name to search for
-  const placeId =
-    details.name !== UNNAMED_PLACE
-      ? await serverBackend.findPlaceFromLink({
-          text: details.area ? `${details.name}, ${details.area}` : details.name,
-          near: coordinates,
-        })
-      : null;
-  const google = placeId ? await serverBackend.getGooglePlace({ placeId, extras: false }) : null;
-  if (!google) return serverBackend.addPlace({ ...byHand(details.name, status), area: details.area ?? "", mapsUrl: details.mapsUrl });
+  if (name === UNNAMED_PLACE) return { data: { placeId: null, name: "" } };
+  const placeId = await serverBackend.findPlaceFromLink({ text: area ? `${name}, ${area}` : name, near: coordinates });
+  return { data: { placeId, name } };
+}
 
+/** Saves a Google place picked in 21b, with our own kind and our area labels from Google's address */
+export async function addGooglePlace(params: { placeId: string; kind: string; status: PlaceStatus }): Promise<DataResult<Place>> {
+  if (!GOOGLE_ID.test(params.placeId)) return { data: null, error: "We couldn't find that place on Google." };
+  // the preview already fetched it with extras, so this comes from the short cache
+  const google = await serverBackend.getGooglePlace({ placeId: params.placeId, extras: true });
+  if (!google) return { data: null, error: "Google didn't answer. Try again in a moment." };
   const { area, city, province, country } = google.address;
   return serverBackend.addPlace({
     name: google.name,
-    category: kindFromGoogleType(google.primaryType),
-    area,
-    city,
-    province,
-    country,
+    category: clean(params.kind, 40) || kindFromGoogleType(google.primaryType),
+    area: clean(area, 60),
+    city: clean(city, 80),
+    province: clean(province, 80),
+    country: clean(country, 80),
     // a Google place's street is fetched fresh to show, not stored
     street: "",
-    mapsUrl: details.mapsUrl,
-    status,
+    mapsUrl: null,
+    status: params.status,
     googlePlaceId: google.placeId,
     location: google.location,
   });
 }
 
-function byHand(name: string, status: PlaceStatus): NewPlace {
-  return {
+export interface PlaceByHand {
+  name: string;
+  kind: string;
+  street: string;
+  area: string;
+  city: string;
+  province: string;
+  country: string;
+  status: PlaceStatus;
+}
+
+/** 21c: a place Google doesn't have */
+export async function addPlaceByHand(form: PlaceByHand): Promise<DataResult<Place>> {
+  const name = clean(form.name, 120);
+  if (!name) return { data: null, error: "Give the place a name." };
+  return serverBackend.addPlace({
     name,
-    category: null,
-    area: "",
-    street: "",
-    city: "",
-    province: "",
-    country: "",
+    category: clean(form.kind, 40) || null,
+    street: clean(form.street, 80),
+    area: clean(form.area, 60),
+    city: clean(form.city, 80),
+    province: clean(form.province, 80),
+    country: clean(form.country, 80),
     mapsUrl: null,
-    status,
+    status: form.status,
     googlePlaceId: null,
     location: null,
-  };
+  });
+}
+
+/** 22: saves the edit form. A Google place keeps Google's street (shown fresh), so only by-hand places save one. */
+export async function updatePlace(id: string, form: PlaceByHand): Promise<DataResult<Place>> {
+  const name = clean(form.name, 120);
+  if (!name) return { data: null, error: "Give the place a name." };
+  return serverBackend.updatePlace({
+    id,
+    name,
+    category: clean(form.kind, 40),
+    status: form.status,
+    street: clean(form.street, 80),
+    area: clean(form.area, 60),
+    city: clean(form.city, 80),
+    province: clean(form.province, 80),
+    country: clean(form.country, 80),
+  });
+}
+
+/**
+ * 22, Change place: the place becomes another Google place (picked in the search), keeping its name, kind, visits and
+ * ratings. The area labels and coordinates come from the new place.
+ */
+export async function changeGooglePlace(id: string, placeId: string, sessionToken: string | null): Promise<DataResult<Place>> {
+  const preview = await previewGooglePlace(placeId, sessionToken);
+  const google = preview.data;
+  if (!google) return { data: null, error: preview.error };
+  const { data: place, error } = await serverBackend.getPlace({ id });
+  if (!place) return { data: null, error };
+  const { area, city, province, country } = google.address;
+  return serverBackend.updatePlace({
+    id,
+    name: place.name,
+    category: place.category,
+    status: place.status,
+    street: "",
+    area: clean(area, 60),
+    city: clean(city, 80),
+    province: clean(province, 80),
+    country: clean(country, 80),
+    google: { placeId: google.placeId, location: google.location },
+  });
+}
+
+export async function unlinkPlace(id: string): Promise<MutationResult> {
+  return serverBackend.unlinkPlace({ id });
+}
+
+export async function deletePlace(id: string): Promise<MutationResult> {
+  return serverBackend.deletePlace({ id });
+}
+
+/** 24: a visit, with your own rating (whole stars, 1–5). The place moves to Been. */
+export async function logVisit(visit: NewVisit): Promise<DataResult<Place>> {
+  const title = clean(visit.title, 120);
+  if (!title) return { data: null, error: "Say what you did there." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(visit.day) || Number.isNaN(Date.parse(visit.day))) {
+    return { data: null, error: "Pick a day for the visit." };
+  }
+  const rating = visit.rating === null ? null : Math.round(visit.rating);
+  if (rating !== null && (rating < 1 || rating > 5)) return { data: null, error: "Ratings go from 1 to 5 stars." };
+  const note = clean(visit.note ?? "", 500) || null;
+  return serverBackend.logVisit({ placeId: visit.placeId, day: visit.day, title, note, rating });
+}
+
+const clean = (text: string, max: number) => text.trim().replace(/\s+/g, " ").slice(0, max);
+
+function validCoordinates(point: Coordinates | null): Coordinates | null {
+  if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return null;
+  return Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180 ? { lat: point.lat, lng: point.lng } : null;
 }
 
 const MAX_REDIRECTS = 5;

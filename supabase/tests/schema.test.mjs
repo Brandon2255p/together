@@ -135,6 +135,20 @@ await fails("one row per Google place per Together", "adele", "insert into publi
 check("another Together can save the same Google place", (await one("eve", "insert into public.places (name, google_place_id) values ('Zeitz', 'ChIJ3dD0bFlnzB0R') returning id")).id !== undefined);
 await fails("coordinates come with the time they were fetched", "brandon", "insert into public.places (name, lat, lng) values ('x', -33.9, 18.4)", [], /check constraint/);
 await fails("a Google place id is just an id", "brandon", "insert into public.places (name, google_place_id) values ('x', 'https://evil.example')", [], /check constraint/);
+// logVisit: a visit's rating upserts the person's own rating
+const upsertRating = "insert into public.place_ratings (place_id, rating, updated_at) values ($1, $2, now()) on conflict (place_id, profile_id) do update set rating = excluded.rating, updated_at = excluded.updated_at";
+await as("brandon", upsertRating, [place, 3]);
+await as("adele", upsertRating, [place, 4]);
+const ratings = (await as("brandon", "select profile_id, rating from public.place_ratings where place_id = $1 order by rating", [place])).rows;
+check("logging a visit updates your own rating, not theirs", ratings.length === 2 && ratings[0].rating === 3 && ratings[1].rating === 4);
+// unlinkPlace: the id and coordinates go together
+const zeitz = (await one("brandon", "select id from public.places where google_place_id = 'ChIJ3dD0bFlnzB0R'")).id;
+await as("brandon", "update public.places set google_place_id = null, lat = null, lng = null, location_fetched_at = null where id = $1", [zeitz]);
+check("unlinking forgets the Google place and its coordinates", (await one("adele", "select google_place_id, lat from public.places where id = $1", [zeitz])).lat === null);
+// deletePlace: either member, and the visits and ratings go with it
+await as("adele", "delete from public.places where id = $1", [place]);
+check("deleting a place removes its visits and ratings", (await one("brandon", "select (select count(*) from public.visits where place_id = $1)::int + (select count(*) from public.place_ratings where place_id = $1)::int n", [place])).n === 0);
+check("Eve's places are untouched", (await one("eve", "select count(*)::int n from public.places")).n === 1);
 
 // wishlist
 const wish = (await one("adele", "insert into public.wishes (name, price_cents) values ('Ceramic vase', 85000) returning id")).id;
