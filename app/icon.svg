@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Together: two orbs (the two of you, in your colours) overlapping into one. Design: Figma › Foundations › App icon -->
+  <defs>
+    <radialGradient id="a" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffb29e"/>
+      <stop offset="0.55" stop-color="#ff6b4a"/>
+      <stop offset="1" stop-color="#e2502f"/>
+    </radialGradient>
+    <radialGradient id="b" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#b8c0ff"/>
+      <stop offset="0.55" stop-color="#6c7bff"/>
+      <stop offset="1" stop-color="#4d5ce6"/>
+    </radialGradient>
+    <clipPath id="clip-a">
+      <circle cx="23" cy="32" r="17"/>
+    </clipPath>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="#fbf8f4"/>
+  <circle cx="23" cy="32" r="17" fill="url(#a)"/>
+  <circle cx="41" cy="32" r="17" fill="url(#b)"/>
+  <!-- where they overlap: the two colours mixed -->
+  <circle cx="41" cy="32" r="17" fill="#9b4fd0" clip-path="url(#clip-a)"/>
+</svg>
