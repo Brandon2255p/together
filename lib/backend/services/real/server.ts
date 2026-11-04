@@ -23,6 +23,7 @@ import type {
   NewWish,
   Place,
   PlaceQuery,
+  PushSubscriptionKeys,
   PlaceStatus,
   NewVisit,
   PlaceChanges,
@@ -273,6 +274,18 @@ export class RealServerService implements ServerBackendService {
     if (!meId) return notSaved(SIGNED_OUT);
     const { error } = await sb.from("profiles").update({ name }).eq("id", meId);
     return error ? notSaved(message(error, "We couldn't change your name. Try again.")) : saved;
+  }
+
+  async savePushSubscription({ endpoint, p256dh, auth }: PushSubscriptionKeys): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.rpc("v1_save_push_subscription", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth });
+    return error ? notSaved(message(error, "We couldn't turn reminders on. Try again.")) : saved;
+  }
+
+  async deletePushSubscription({ endpoint }: { endpoint: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
+    return error ? notSaved(message(error, "We couldn't turn reminders off. Try again.")) : saved;
   }
 
   async joinTogether({ code }: { code: string }): Promise<DataResult<Together>> {

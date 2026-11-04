@@ -16,6 +16,7 @@ import type {
   Place,
   PlaceChanges,
   PlaceQuery,
+  PushSubscriptionKeys,
   Together,
   WishItem,
 } from "@/lib/models";
@@ -73,6 +74,24 @@ export class StubServerService implements ServerBackendService {
     if (!me) return { success: false, error: "You're not in a Together yet." };
     me.name = name;
     me.initial = name.charAt(0).toUpperCase();
+    return done;
+  }
+
+  async savePushSubscription(subscription: PushSubscriptionKeys) {
+    await wait();
+    log("savePushSubscription", { endpoint: subscription.endpoint.slice(0, 40) });
+    const s = state();
+    const me = s.together?.meId;
+    if (!me) return { success: false, error: "You're not in a Together yet." };
+    s.pushSubscriptions = [...s.pushSubscriptions.filter((p) => p.endpoint !== subscription.endpoint), { ...subscription, memberId: me }];
+    return done;
+  }
+
+  async deletePushSubscription({ endpoint }: { endpoint: string }) {
+    await wait();
+    log("deletePushSubscription");
+    const s = state();
+    s.pushSubscriptions = s.pushSubscriptions.filter((p) => p.endpoint !== endpoint);
     return done;
   }
 

@@ -1,5 +1,16 @@
 import { addDays, todayKey } from "@/lib/format";
-import type { CalendarEvent, CatalogEntry, Chore, Goal, Member, Place, ShoppingItem, Together, WishItem } from "@/lib/models";
+import type {
+  CalendarEvent,
+  CatalogEntry,
+  Chore,
+  Goal,
+  Member,
+  Place,
+  PushSubscriptionKeys,
+  ShoppingItem,
+  Together,
+  WishItem,
+} from "@/lib/models";
 
 // Seed data for the stub backend. Dates are relative to today so the app always looks lived-in.
 
@@ -15,6 +26,8 @@ export interface StubState {
   places: Place[];
   wishes: WishItem[];
   goals: Goal[];
+  /** devices that asked for reminders, and who's signed in on each */
+  pushSubscriptions: (PushSubscriptionKeys & { memberId: string })[];
   nextId: number;
 }
 
@@ -145,6 +158,7 @@ export function seed(today = todayKey()): StubState {
       { id: "g-1", title: "Weekend in Paternoster", saved: 4200, target: 8000, ownerIds: [BRANDON.id, ADELE.id] },
       { id: "g-2", title: "New road bike", saved: 6500, target: 18000, ownerIds: [BRANDON.id] },
     ],
+    pushSubscriptions: [],
     nextId: 100,
   };
 }

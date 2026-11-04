@@ -55,6 +55,8 @@ jobs:
           curl -fsS -o /dev/null -w "sign-in %{http_code}\n" http://localhost:3000/sign-in
           curl -fsS -o /dev/null -w "home %{http_code}\n" http://localhost:3000/home
           curl -fsS -o /dev/null -w "design-system %{http_code}\n" http://localhost:3000/design-system
+          curl -fsS -o /dev/null -w "sw.js %{http_code}\n" http://localhost:3000/sw.js
+          curl -fsS -o /dev/null -w "manifest %{http_code}\n" http://localhost:3000/manifest.webmanifest
 
       - name: Logs
         if: always()
