@@ -36,6 +36,7 @@ function toCard(p: Optimistic<Place>): PlaceCardData {
     subtitle: `${p.category} · ${p.area}`,
     hue: p.hue,
     rating: averageRating(p),
+    photoUrl: p.photoUrl ?? null,
     badge: p.status === "been" ? `Visited ${p.visits.length}×` : null,
     href: `/places/${p.id}` as Route,
     pending: p.id.startsWith(TEMP),
@@ -66,6 +67,8 @@ export function usePlacesViewModel(data: PlacesViewData) {
       ratings: {},
       visits: [],
       hue: HUES[places.length % HUES.length] ?? "accent",
+      googleRating: null,
+      photoUrl: null,
     };
     setError(null);
     setInput("");

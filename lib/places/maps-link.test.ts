@@ -36,6 +36,7 @@ describe("placeFromMapsUrl", () => {
       name: "Nobu Cape Town",
       area: null,
       mapsUrl: "https://www.google.com/maps/place/Nobu+Cape+Town/@-33.9,18.4,17z",
+      coordinates: { lat: -33.9, lng: 18.4 },
     });
   });
 
@@ -52,6 +53,7 @@ describe("placeFromMapsUrl", () => {
       name: "Woodlands Boulevard",
       area: "De Villebois Mareuil Dr, Pretoria",
       mapsUrl: "https://maps.app.goo.gl/AbC123",
+      coordinates: null,
     });
   });
 
@@ -68,6 +70,16 @@ describe("placeFromMapsUrl", () => {
   it("ignores dropped-pin coordinates and falls back to a generic name", () => {
     expect(details("https://maps.google.com/?q=-25.79,28.27").name).toBe("Pinned place");
     expect(details("https://maps.app.goo.gl/abc123").name).toBe("Pinned place");
+  });
+
+  it("prefers the pin in /data= over the map's centre", () => {
+    const url =
+      "https://www.google.com/maps/place/Zeitz+MOCAA/@-33.9,18.4,17z/data=!3m1!4b1!4m6!3m5!1s0x1dcc:0x2!8m2!3d-33.9083!4d18.4225";
+    expect(details(url).coordinates).toEqual({ lat: -33.9083, lng: 18.4225 });
+  });
+
+  it("reads a dropped pin's coordinates from ?q=", () => {
+    expect(details("https://maps.google.com/?q=-25.79,28.27").coordinates).toEqual({ lat: -25.79, lng: 28.27 });
   });
 
   it("falls back to ?q=", () => {

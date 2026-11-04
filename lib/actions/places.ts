@@ -2,7 +2,7 @@
 
 import { serverBackend } from "@/lib/backend/server";
 import type { PlaceStatus } from "@/lib/models";
-import { isMapsUrl, isShortMapsLink, placeFromMapsUrl, readPlaceInput } from "@/lib/places/maps-link";
+import { isMapsUrl, isShortMapsLink, placeFromMapsUrl, readPlaceInput, UNNAMED_PLACE } from "@/lib/places/maps-link";
 
 export async function getPlaces() {
   return serverBackend.getPlaces();
@@ -12,14 +12,36 @@ export async function getPlace(id: string) {
   return serverBackend.getPlace({ id });
 }
 
-/** `input`: a Google Maps link, the text the Maps app shares, or just a name */
+/**
+ * `input`: a Google Maps link, the text the Maps app shares, or just a name.
+ * A Maps link is followed and read for the name, area and pin, then matched on Google Places for the category,
+ * rating and photo. A typed name is saved as it is (it could be anything, like "Mom's place").
+ */
 export async function addPlace(input: string, status: PlaceStatus) {
   const parsed = readPlaceInput(input);
   if (!parsed) return { data: null, error: "Paste a Google Maps link or type the place's name." };
-  if (parsed.kind === "name") return serverBackend.addPlace({ name: parsed.name, area: null, mapsUrl: null, status });
+  if (parsed.kind === "name") {
+    return serverBackend.addPlace({ name: parsed.name, area: null, category: null, mapsUrl: null, status, google: null });
+  }
 
   const resolved = isShortMapsLink(parsed.url) ? ((await followMapsLink(parsed.url)) ?? parsed.url) : parsed.url;
-  return serverBackend.addPlace({ ...placeFromMapsUrl(resolved, parsed.url, parsed.label), status });
+  const { coordinates, ...details } = placeFromMapsUrl(resolved, parsed.url, parsed.label);
+  // a dropped pin has no name to search for
+  const named = details.name !== UNNAMED_PLACE;
+  const match = named
+    ? await serverBackend.lookUpPlace({
+        text: details.area ? `${details.name}, ${details.area}` : details.name,
+        near: coordinates,
+      })
+    : null;
+  return serverBackend.addPlace({
+    name: match?.name ?? details.name,
+    area: match?.area ?? details.area,
+    category: match?.category ?? null,
+    mapsUrl: details.mapsUrl,
+    status,
+    google: match ? { placeId: match.placeId, rating: match.rating, photo: match.photo } : null,
+  });
 }
 
 const MAX_REDIRECTS = 5;

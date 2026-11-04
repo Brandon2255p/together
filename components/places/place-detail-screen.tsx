@@ -11,6 +11,7 @@ import { Chip } from "@/components/ui/chip";
 import { iconButtonVariants } from "@/components/ui/icon-button";
 import { SectionHeader } from "@/components/ui/layout";
 import { Reveal, RevealItem } from "@/components/ui/motion";
+import { Photo } from "@/components/ui/photo";
 import { Rating } from "@/components/ui/thumb";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,10 @@ const HERO: Record<Hue, string> = {
 export interface PlaceDetailScreenProps {
   name: string;
   hue: Hue;
+  /** fills the hero when there is one */
+  photoUrl: string | null;
+  /** the rating on Google Maps */
+  googleRating: number | null;
   tags: { label: string; tone: "neutral" | "success" | "partner" }[];
   ratings: { member: Member; value: number | null }[];
   mapsUrl: string | null;
@@ -33,7 +38,7 @@ export interface PlaceDetailScreenProps {
 }
 
 export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
-  const { name, hue, tags, ratings, mapsUrl, visits, backHref, onLogVisit } = props;
+  const { name, hue, photoUrl, googleRating, tags, ratings, mapsUrl, visits, backHref, onLogVisit } = props;
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 300], [0, 90]);
   const pinScale = useTransform(scrollY, [0, 200], [1, 0.8]);
@@ -42,11 +47,14 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
     <div className="-mx-5 -mt-[max(1.5rem,env(safe-area-inset-top))]">
       <motion.div
         style={{ y: heroY }}
-        className={cn("relative grid h-[300px] place-items-center bg-linear-135", HERO[hue])}
+        className={cn("relative grid h-[300px] place-items-center overflow-hidden bg-linear-135", HERO[hue])}
       >
         <motion.span style={{ scale: pinScale }} className="text-on-accent">
           <MapPinIcon className="size-14" strokeWidth={1.5} aria-hidden />
         </motion.span>
+        {photoUrl ? <Photo src={photoUrl} sizes="(max-width: 440px) 100vw, 440px" priority /> : null}
+        {/* keeps the back button readable on a bright photo */}
+        {photoUrl ? <div className="absolute inset-x-0 top-0 h-28 bg-linear-to-b from-black/30 to-transparent" aria-hidden /> : null}
         <div className="absolute inset-x-5 top-[max(1rem,env(safe-area-inset-top))] flex justify-between">
           <Link href={backHref} aria-label="Back to places" className={iconButtonVariants({ variant: "glass" })}>
             <ChevronLeftIcon />
@@ -63,6 +71,12 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
                 {t.label}
               </Chip>
             ))}
+            {googleRating !== null ? (
+              <Chip>
+                <Rating value={googleRating} className="text-inherit" />
+                <span>on Google</span>
+              </Chip>
+            ) : null}
           </div>
         </RevealItem>
 

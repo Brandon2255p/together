@@ -103,14 +103,42 @@ export interface Place {
   ratings: Partial<Record<MemberId, number>>;
   visits: Visit[];
   hue: Hue;
+  /** the place's rating on Google Maps, 1–5, when it was matched on Google */
+  googleRating: number | null;
+  /** a photo of the place (our /api/places/<id>/photo route), when Google has one */
+  photoUrl: string | null;
 }
 
 export interface NewPlace {
   name: string;
   /** the street and suburb or city, read from the Maps link; null when we don't know it */
   area: string | null;
+  /** "Shopping mall", "Coffee shop"… from Google; null for "Saved place" */
+  category: string | null;
   mapsUrl: string | null;
   status: PlaceStatus;
+  /** what matched on Google Places, or null when we didn't look it up or found nothing */
+  google: GooglePlaceRef | null;
+}
+
+export interface GooglePlaceRef {
+  placeId: string;
+  rating: number | null;
+  /** the Places API resource name of its first photo, "places/<id>/photos/<ref>" */
+  photo: string | null;
+}
+
+/** what to look up on Google Places: a name (with the area when known), near the pin when the link had one */
+export interface PlaceQuery {
+  text: string;
+  near: { lat: number; lng: number } | null;
+}
+
+/** the best match on Google Places for a PlaceQuery */
+export interface PlaceMatch extends GooglePlaceRef {
+  name: string;
+  category: string | null;
+  area: string | null;
 }
 
 // ---- Wishlist -------------------------------------------------------------

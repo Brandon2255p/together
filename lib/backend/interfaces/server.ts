@@ -10,6 +10,8 @@ import type {
   NewChore,
   NewPlace,
   Place,
+  PlaceMatch,
+  PlaceQuery,
   ShoppingItem,
   Together,
   WishItem,
@@ -50,6 +52,13 @@ export interface ServerBackendService {
   getPlaces(): Promise<DataResult<Place[]>>;
   getPlace(params: { id: string }): Promise<DataResult<Place>>;
   addPlace(params: NewPlace): Promise<DataResult<Place>>;
+  /**
+   * The best match on Google Places, to fill in a place's category, rating and photo. Best effort: null when there's
+   * no match, no API key, or Google doesn't answer, and the place is saved without them.
+   */
+  lookUpPlace(params: PlaceQuery): Promise<PlaceMatch | null>;
+  /** a short-lived image URL for the place's photo, or null when it has none (or isn't in your Together) */
+  getPlacePhotoUrl(params: { id: string }): Promise<string | null>;
 
   // Wishlist
   /** a member's wishes. Asking for your own never says who claimed what. */

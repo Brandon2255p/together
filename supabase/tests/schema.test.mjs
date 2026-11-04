@@ -130,6 +130,13 @@ await fails("can't rate for someone else", "brandon", "insert into public.place_
 await fails("rating is 1-5", "adele", "insert into public.place_ratings (place_id, rating) values ($1, 6)", [place], /check constraint/);
 await as("adele", "insert into public.visits (place_id, day, title, rating) values ($1, $2, 'Anniversary', 5)", [place, today]);
 check("logging a visit marks it been", (await one("brandon", "select status from public.places where id = $1", [place])).status === "been");
+const gPlace = await one(
+  "brandon",
+  "insert into public.places (name, google_place_id, google_rating, google_photo) values ('Zeitz MOCAA', 'ChIJabc', 4.6, 'places/ChIJabc/photos/xyz') returning google_rating",
+);
+check("keeps the Google rating", Number(gPlace.google_rating) === 4.6);
+await fails("Google rating is 1-5", "brandon", "insert into public.places (name, google_rating) values ('x', 5.5)", [], /check constraint/);
+await fails("Google photo must be a Places photo name", "brandon", "insert into public.places (name, google_photo) values ('x', 'https://evil.example/x.jpg')", [], /check constraint/);
 
 // wishlist
 const wish = (await one("adele", "insert into public.wishes (name, price_cents) values ('Ceramic vase', 85000) returning id")).id;

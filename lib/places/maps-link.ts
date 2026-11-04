@@ -4,6 +4,9 @@ const URL_IN_TEXT = /https?:\/\/\S+/i;
 /** "-25.79,28.27": a dropped pin, not a name */
 const COORDINATES = /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/;
 
+/** the name when a link has none (a dropped pin) */
+export const UNNAMED_PLACE = "Pinned place";
+
 export type PlaceInput = { kind: "name"; name: string } | { kind: "link"; url: URL; label: string | null };
 
 export interface PlaceDetails {
@@ -11,6 +14,13 @@ export interface PlaceDetails {
   /** the street and suburb or city, when the link carries an address */
   area: string | null;
   mapsUrl: string | null;
+  /** where the pin is, when the link says: helps the Places API pick the right match */
+  coordinates: Coordinates | null;
+}
+
+export interface Coordinates {
+  lat: number;
+  lng: number;
 }
 
 /**
@@ -53,10 +63,28 @@ export function isMapsUrl(url: URL): boolean {
 export function placeFromMapsUrl(resolved: URL, shared: URL, label: string | null): PlaceDetails {
   const text = textFromMapsUrl(resolved);
   const [first, ...rest] = text ? splitAddress(text) : [];
-  const name = label ?? first ?? "Pinned place";
+  const name = label ?? first ?? UNNAMED_PLACE;
   // when the share text already gave the name, the link's first part may be the name again or the street
   const addressParts = label && first && !sameName(first, label) ? [first, ...rest] : rest;
-  return { name: name.slice(0, 80), area: areaFrom(addressParts), mapsUrl: shared.toString() };
+  return {
+    name: name.slice(0, 80),
+    area: areaFrom(addressParts),
+    mapsUrl: shared.toString(),
+    coordinates: coordinatesFrom(resolved),
+  };
+}
+
+/** the pin (`!3d<lat>!4d<lng>` in /data=), else the map's centre (`/@lat,lng,zoom`), else `?q=lat,lng` */
+function coordinatesFrom(url: URL): Coordinates | null {
+  const text = safeDecode(url.pathname) + url.search;
+  const match =
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/.exec(text) ??
+    /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(text) ??
+    /[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:&|$)/.exec(text);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
 }
 
 function textFromMapsUrl(url: URL): string | null {
@@ -99,6 +127,7 @@ const POSTAL_CODE = /^[\d\s-]+$/;
 const PLUS_CODE = /^\w{4}\+\w{2,}$/;
 
 /**
+ * Fits places.area (60 characters).
  * "De Villebois Mareuil Dr, Pretoria, 0081, South Africa" → "De Villebois Mareuil Dr, Pretoria":
  * drop the country (Google puts it after the postal code), postal codes and plus codes, then keep the last two parts.
  */
@@ -109,5 +138,5 @@ function areaFrom(parts: string[]): string | null {
     (part) => !POSTAL_CODE.test(part) && !PLUS_CODE.test(part),
   );
   const area = words.slice(-2).join(", ");
-  return area ? area.slice(0, 80) : null;
+  return area ? area.slice(0, 60) : null;
 }
