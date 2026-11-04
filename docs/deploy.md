@@ -75,6 +75,10 @@ Write both as literal URLs. Coolify copies compose defaults into its `.env`, and
 inside another variable's default there. That's why these aren't built from a tailnet name. If either is missing,
 the deploy stops with `set PUBLIC_APP_URL` or `set PUBLIC_SUPABASE_URL`.
 
+Each sidecar sets its node name with `TS_HOSTNAME`, not a compose `hostname:`. Docker maps a container's own hostname
+to itself. A sidecar with `hostname: together` would resolve `together` to itself and get "connection refused" on port
+3000, when it should reach the app.
+
 Each sidecar keeps its node identity in `./ts/<name>/state`. That directory holds private keys, and it's gitignored.
 HTTPS and MagicDNS must be on for the tailnet (in the Tailscale admin, under DNS).
 

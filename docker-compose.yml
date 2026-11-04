@@ -17,8 +17,10 @@ configs:
 services:
   ts-together:
     image: 'tailscale/tailscale:stable'
-    hostname: together
     environment:
+      # the node name on the tailnet. Not the container hostname: Docker maps that to the container itself, so
+      # "together" would resolve to this sidecar instead of the app.
+      - TS_HOSTNAME=together
       - 'TS_AUTHKEY=${TS_AUTHKEY}'
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SERVE_CONFIG=/config/serve.json
@@ -53,8 +55,9 @@ services:
     restart: always
   ts-together-supabase:
     image: 'tailscale/tailscale:stable'
-    hostname: together-supabase
     environment:
+      # the node name on the tailnet (see ts-together for why it isn't the container hostname)
+      - TS_HOSTNAME=together-supabase
       - 'TS_AUTHKEY=${TS_AUTHKEY}'
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SERVE_CONFIG=/config/serve.json
