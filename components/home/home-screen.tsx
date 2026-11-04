@@ -3,11 +3,12 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
-import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon } from "lucide-react";
+import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, UserRoundIcon } from "lucide-react";
 import type { Member, MemberTone } from "@/lib/models";
 import { SwitcherPill } from "@/components/together/switcher-pill";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
 import { AvatarStack } from "@/components/ui/avatar";
+import { iconButtonVariants } from "@/components/ui/icon-button";
 import { IconBadge, InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
 import { ListItem, Reveal, RevealItem } from "@/components/ui/motion";
 import { Orb } from "@/components/ui/orb";
@@ -23,7 +24,7 @@ export interface HomeScreenProps {
   onChoreDoneChange: (id: string, done: boolean) => void;
   toBuy: number;
   wantToGo: number;
-  links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route };
+  links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route; profile: Route };
   error: string | null;
 }
 
@@ -49,9 +50,14 @@ export function HomeScreen(props: HomeScreenProps) {
           eyebrow={dateLabel}
           title={greeting}
           actions={
-            <Link href={links.together} aria-label={`Who's in ${switcher.name}`} className="rounded-full transition-transform active:scale-95">
-              <AvatarStack members={members.slice(0, 4)} size="lg" />
-            </Link>
+            <>
+              <Link href={links.together} aria-label={`Who's in ${switcher.name}`} className="rounded-full transition-transform active:scale-95">
+                <AvatarStack members={members.slice(0, 4)} size="lg" />
+              </Link>
+              <Link href={links.profile} aria-label="You: your name and signing out" className={iconButtonVariants({ variant: "surface", size: "sm" })}>
+                <UserRoundIcon aria-hidden />
+              </Link>
+            </>
           }
         />
       </RevealItem>

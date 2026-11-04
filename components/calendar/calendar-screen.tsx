@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronLeftIcon, ChevronRightIcon, CoffeeIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CoffeeIcon, PlusIcon } from "lucide-react";
 import type { MonthDay } from "@/lib/calendar/month";
 import type { DayKey, Member, MemberTone } from "@/lib/models";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
@@ -9,10 +9,12 @@ import { AvatarStack, TONE_BG } from "@/components/ui/avatar";
 import { IconButton } from "@/components/ui/icon-button";
 import { InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
 import { ListItem } from "@/components/ui/motion";
+import { AddEventSheet, type AddEventSheetProps } from "./add-event-sheet";
+import { EventSheet, type EventSheetData } from "./event-sheet";
 import { cn } from "@/lib/utils";
 
 export type AgendaRow =
-  | { kind: "event"; id: string; title: string; when: string; where: string | null; people: Member[]; tone: MemberTone | "ink" }
+  | { kind: "event"; id: string; key?: string; title: string; when: string; where: string | null; people: Member[]; tone: MemberTone | "ink" }
   | { kind: "chore"; id: string; row: ChoreRowData };
 
 export interface CalendarScreenProps {
@@ -30,6 +32,16 @@ export interface CalendarScreenProps {
   onChoreDoneChange: (id: string, done: boolean) => void;
   loading: boolean;
   error: string | null;
+  onAddPress: () => void;
+  addSheet: AddEventSheetProps;
+  onEventOpen: (id: string) => void;
+  eventSheet: {
+    event: EventSheetData | null;
+    onClose: () => void;
+    onDelete: (id: string) => void;
+    pending: boolean;
+    error: string | null;
+  };
 }
 
 const DOT: Record<MemberTone | "chore", string> = { ...TONE_BG, chore: "bg-ink-subtle" };
@@ -38,6 +50,7 @@ const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 export function CalendarScreen(props: CalendarScreenProps) {
   const { monthLabel, yearLabel, weeks, today, selected, onSelect, onPrevMonth, onNextMonth, legend, agendaTitle, agenda, onChoreDoneChange, loading, error } = props;
+  const { onAddPress, addSheet, onEventOpen, eventSheet } = props;
   return (
     <div className="flex flex-col gap-4">
       <ScreenHeader
@@ -50,6 +63,9 @@ export function CalendarScreen(props: CalendarScreenProps) {
             </IconButton>
             <IconButton label="Next month" onClick={onNextMonth}>
               <ChevronRightIcon />
+            </IconButton>
+            <IconButton label="Add to calendar" variant="ink" onClick={onAddPress}>
+              <PlusIcon />
             </IconButton>
           </>
         }
@@ -141,16 +157,22 @@ export function CalendarScreen(props: CalendarScreenProps) {
             ) : null}
             {agenda.map((entry) =>
               entry.kind === "event" ? (
-                <ListItem key={entry.id} className="flex items-center gap-3.5 rounded-row bg-surface px-4 py-3.5">
-                  <span className={cn("h-9 w-1 shrink-0 rounded-full", BAR[entry.tone])} aria-hidden />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate text-body-strong">{entry.title}</span>
-                    <span className="text-caption text-ink-muted">
-                      {entry.when}
-                      {entry.where ? ` · ${entry.where}` : ""}
+                <ListItem key={entry.key ?? entry.id}>
+                  <button
+                    type="button"
+                    onClick={() => onEventOpen(entry.id)}
+                    className="flex w-full items-center gap-3.5 rounded-row bg-surface px-4 py-3.5 text-left transition-transform active:scale-[0.99]"
+                  >
+                    <span className={cn("h-9 w-1 shrink-0 rounded-full", BAR[entry.tone])} aria-hidden />
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-body-strong">{entry.title}</span>
+                      <span className="text-caption text-ink-muted">
+                        {entry.when}
+                        {entry.where ? ` · ${entry.where}` : ""}
+                      </span>
                     </span>
-                  </span>
-                  <AvatarStack members={entry.people} />
+                    <AvatarStack members={entry.people} />
+                  </button>
                 </ListItem>
               ) : (
                 <ListItem key={entry.id}>
@@ -161,6 +183,9 @@ export function CalendarScreen(props: CalendarScreenProps) {
           </motion.ul>
         </AnimatePresence>
       </section>
+
+      <AddEventSheet {...addSheet} />
+      <EventSheet {...eventSheet} />
     </div>
   );
 }

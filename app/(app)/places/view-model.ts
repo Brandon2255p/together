@@ -6,6 +6,7 @@ import type { PlaceCardData } from "@/components/places/places-screen";
 import { addPlace } from "@/lib/actions/places";
 import type { Hue, Place, PlaceStatus } from "@/lib/models";
 import { TEMP, type Optimistic } from "../_lib/optimistic";
+import { useServerState } from "../_lib/server-state";
 import { isShortMapsLink, placeFromMapsUrl, readPlaceInput } from "@/lib/places/maps-link";
 
 export interface PlacesViewData {
@@ -46,7 +47,7 @@ const HUES: Hue[] = ["accent", "partner", "success", "warning"];
 
 export function usePlacesViewModel(data: PlacesViewData) {
   const [tab, setTab] = useState<PlaceStatus>(data.tab);
-  const [places, setPlaces] = useState<Optimistic<Place>[]>(data.places);
+  const [places, setPlaces] = useServerState<Optimistic<Place>[]>(data.places);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
 

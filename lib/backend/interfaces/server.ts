@@ -1,6 +1,9 @@
 import type {
   CalendarEvent,
   CatalogEntry,
+  NewEvent,
+  NewGoal,
+  NewWish,
   Chore,
   DataResult,
   DayKey,
@@ -49,6 +52,10 @@ export interface ServerBackendService {
   /** leaves the current Together; data is the Together you land in, or null when there's none left */
   leaveTogether(): Promise<DataResult<{ nextTogetherId: string | null }>>;
 
+  // You
+  /** renames the signed-in person everywhere they appear */
+  setMyName(params: { name: string }): Promise<MutationResult>;
+
   // Shopping
   getShoppingItems(): Promise<DataResult<ShoppingItem[]>>;
   /** the names the autocomplete draws on: this Together's history plus everyone's popular items */
@@ -67,6 +74,8 @@ export interface ServerBackendService {
   // Calendar
   /** events from `from` to `to`, both included */
   getEvents(params: { from: DayKey; to: DayKey }): Promise<DataResult<CalendarEvent[]>>;
+  addEvent(params: NewEvent): Promise<DataResult<CalendarEvent>>;
+  deleteEvent(params: { id: string }): Promise<MutationResult>;
 
   // Places
   getPlaces(): Promise<DataResult<Place[]>>;
@@ -88,4 +97,11 @@ export interface ServerBackendService {
   getGoals(): Promise<DataResult<Goal[]>>;
   /** claim (or unclaim) someone else's wish as a gift you'll buy */
   setWishClaimed(params: { id: string; claimed: boolean }): Promise<MutationResult>;
+  /** adds a wish to your own list */
+  addWish(params: NewWish): Promise<DataResult<WishItem>>;
+  /** removes one of your own wishes */
+  deleteWish(params: { id: string }): Promise<MutationResult>;
+  addGoal(params: NewGoal): Promise<DataResult<Goal>>;
+  /** sets how much has been saved towards a goal */
+  setGoalSaved(params: { id: string; saved: number }): Promise<DataResult<Goal>>;
 }

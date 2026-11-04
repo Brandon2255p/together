@@ -25,6 +25,7 @@ const LINKS = {
   calendar: "/calendar" as Route,
   together: "/together" as Route,
   togethers: "/togethers" as Route,
+  profile: "/profile" as Route,
 };
 
 export function useHomeViewModel(data: HomeViewData) {

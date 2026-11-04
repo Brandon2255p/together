@@ -20,4 +20,10 @@ export class StubBrowserService implements BrowserBackendService {
     await wait(100);
     return { error: null };
   }
+
+  /** the stub's data lives on the dev server, so there's nothing to listen to: changes show after a refresh */
+  watchTogether() {
+    console.info("[stub] watchTogether: no live changes on the stub");
+    return () => undefined;
+  }
 }
