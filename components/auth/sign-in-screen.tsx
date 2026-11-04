@@ -17,8 +17,9 @@ export interface SignInScreenProps {
 
 export function SignInScreen({ email, onEmailChange, onSubmit, pending, error }: SignInScreenProps) {
   return (
-    <main className="relative flex min-h-dvh flex-col overflow-hidden px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
-      <Orb className="absolute -top-10 -left-16 size-[420px]" />
+    <main className="group relative flex min-h-dvh flex-col overflow-hidden px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
+      {/* with the keyboard up the form slides under the orb, so it fades back while you type */}
+      <Orb className="absolute -top-10 -left-16 size-[420px] transition-opacity duration-500 group-has-[input:focus]:opacity-25" />
       <div className="flex-1" />
       <Reveal className="relative flex flex-col gap-6">
         <RevealItem>
@@ -30,7 +31,7 @@ export function SignInScreen({ email, onEmailChange, onSubmit, pending, error }:
             <br />
             shared.
           </h1>
-          <p className="text-body text-ink-muted">
+          <p className="text-body text-ink/75">
             One calm place for your lists, plans, places and wishes — for the two of you.
           </p>
         </RevealItem>

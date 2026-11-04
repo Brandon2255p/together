@@ -50,7 +50,7 @@ export function ChoresPanel<F extends string>(props: ChoresPanelProps<F>) {
           <ul className="flex flex-col gap-2">
             <AnimatePresence initial={false} mode="popLayout">
               {section.rows.map((row) => (
-                <ListItem key={row.id}>
+                <ListItem key={row.key ?? row.id}>
                   <ChoreRow row={row} onDoneChange={onDoneChange} />
                 </ListItem>
               ))}

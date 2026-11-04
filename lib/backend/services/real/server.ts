@@ -394,7 +394,7 @@ export class RealServerService implements ServerBackendService {
     return data ? ok(toPlace(data)) : fail("We couldn't find that place.");
   }
 
-  async addPlace({ name, mapsUrl, status }: NewPlace): Promise<DataResult<Place>> {
+  async addPlace({ name, area, mapsUrl, status }: NewPlace): Promise<DataResult<Place>> {
     const sb = await createClient();
     const hues: Hue[] = ["accent", "partner", "success", "warning"];
     const { count } = await sb.from("places").select("id", { count: "exact", head: true });
@@ -403,7 +403,7 @@ export class RealServerService implements ServerBackendService {
       .insert({
         name,
         category: "Saved place",
-        area: mapsUrl ? "From Google Maps" : "Added by hand",
+        area: area ?? (mapsUrl ? "From Google Maps" : "Added by hand"),
         maps_url: mapsUrl,
         status,
         hue: hues[(count ?? 0) % hues.length],

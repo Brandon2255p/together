@@ -1,7 +1,7 @@
 import "server-only";
 import { addDays } from "@/lib/format";
 import type { ServerBackendService } from "@/lib/backend/interfaces/server";
-import type { Chore, DataResult, MutationResult, Place, Together } from "@/lib/models";
+import type { Chore, DataResult, MutationResult, NewPlace, Place, Together } from "@/lib/models";
 import { ADELE, BRANDON, seed, type StubState } from "@/lib/backend/services/stub/seed";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis).
@@ -146,13 +146,13 @@ export class StubServerService implements ServerBackendService {
     return place ? ok(place) : fail<Place>("We couldn't find that place.");
   }
 
-  async addPlace({ name, mapsUrl, status }: { name: string; mapsUrl: string | null; status: Place["status"] }) {
+  async addPlace({ name, area, mapsUrl, status }: NewPlace) {
     await wait();
-    log("addPlace", { name, mapsUrl, status });
+    log("addPlace", { name, area, mapsUrl, status });
     const hues = ["accent", "partner", "success", "warning"] as const;
     const s = state();
     const place: Place = {
-      id: id("p"), name, category: "Saved place", area: mapsUrl ? "From Google Maps" : "Added by hand",
+      id: id("p"), name, category: "Saved place", area: area ?? (mapsUrl ? "From Google Maps" : "Added by hand"),
       mapsUrl, status, ratings: {}, visits: [], hue: hues[s.places.length % hues.length] ?? "accent",
     };
     s.places.unshift(place);

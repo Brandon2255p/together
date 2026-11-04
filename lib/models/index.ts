@@ -107,6 +107,8 @@ export interface Place {
 
 export interface NewPlace {
   name: string;
+  /** the street and suburb or city, read from the Maps link; null when we don't know it */
+  area: string | null;
   mapsUrl: string | null;
   status: PlaceStatus;
 }
