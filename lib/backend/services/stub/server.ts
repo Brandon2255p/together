@@ -1,7 +1,22 @@
 import "server-only";
 import { addDays } from "@/lib/format";
 import type { ServerBackendService } from "@/lib/backend/interfaces/server";
-import type { Chore, Coordinates, DataResult, MutationResult, NewPlace, Place, PlaceQuery, Together } from "@/lib/models";
+import type {
+  CalendarEvent,
+  Chore,
+  Coordinates,
+  DataResult,
+  Goal,
+  MutationResult,
+  NewEvent,
+  NewGoal,
+  NewPlace,
+  NewWish,
+  Place,
+  PlaceQuery,
+  Together,
+  WishItem,
+} from "@/lib/models";
 import { stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
 import { ADELE, BRANDON, seed, type StubState } from "@/lib/backend/services/stub/seed";
 
@@ -145,6 +160,22 @@ export class StubServerService implements ServerBackendService {
     return ok(state().events.filter((e) => e.day >= from && e.day <= to));
   }
 
+  async addEvent(event: NewEvent) {
+    await wait();
+    log("addEvent", event);
+    const added: CalendarEvent = { ...event, id: id("e") };
+    state().events.push(added);
+    return ok(added);
+  }
+
+  async deleteEvent({ id: eventId }: { id: string }) {
+    await wait();
+    log("deleteEvent", { id: eventId });
+    const s = state();
+    s.events = s.events.filter((e) => e.id !== eventId);
+    return done;
+  }
+
   async getPlaces() {
     await wait();
     log("getPlaces");
@@ -233,5 +264,45 @@ export class StubServerService implements ServerBackendService {
     if (claimed && wish.claimedBy && wish.claimedBy !== me) return { success: false, error: "Someone already claimed it." };
     wish.claimedBy = claimed ? me : null;
     return done;
+  }
+
+  async addWish(wish: NewWish) {
+    await wait();
+    log("addWish", wish);
+    const s = state();
+    const me = s.together?.meId;
+    if (!me) return fail<WishItem>("You're not in a Together yet.");
+    const hues = ["accent", "partner", "success", "warning"] as const;
+    const mine = s.wishes.filter((w) => w.ownerId === me).length;
+    const added: WishItem = { ...wish, id: id("w"), ownerId: me, claimedBy: null, hue: hues[mine % hues.length] ?? "accent" };
+    s.wishes.push(added);
+    return ok(added);
+  }
+
+  async deleteWish({ id: wishId }: { id: string }) {
+    await wait();
+    log("deleteWish", { id: wishId });
+    const s = state();
+    const wish = s.wishes.find((w) => w.id === wishId);
+    if (wish && wish.ownerId !== s.together?.meId) return { success: false, error: "You can only remove your own wishes." };
+    s.wishes = s.wishes.filter((w) => w.id !== wishId);
+    return done;
+  }
+
+  async addGoal(goal: NewGoal) {
+    await wait();
+    log("addGoal", goal);
+    const added: Goal = { ...goal, id: id("g"), saved: 0 };
+    state().goals.push(added);
+    return ok(added);
+  }
+
+  async setGoalSaved({ id: goalId, saved }: { id: string; saved: number }) {
+    await wait();
+    log("setGoalSaved", { id: goalId, saved });
+    const goal = state().goals.find((g) => g.id === goalId);
+    if (!goal) return fail<Goal>("That goal was removed.");
+    goal.saved = saved;
+    return ok(goal);
   }
 }

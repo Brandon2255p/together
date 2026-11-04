@@ -1,16 +1,27 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { GiftIcon, SparklesIcon, TargetIcon } from "lucide-react";
+import { ExternalLinkIcon, GiftIcon, PlusIcon, SparklesIcon, TargetIcon } from "lucide-react";
 import type { Hue, Member } from "@/lib/models";
 import { AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+import { IconButton } from "@/components/ui/icon-button";
 import { EmptyState, InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
 import { ListItem } from "@/components/ui/motion";
 import { Progress } from "@/components/ui/progress";
 import { Segmented } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
+import {
+  AddGoalSheet,
+  AddWishSheet,
+  SavingsSheet,
+  WishSheet,
+  type GoalDraft,
+  type SavingsSheetData,
+  type WishDraft,
+  type WishSheetData,
+} from "./wish-sheets";
 
 export type WishlistTab = "mine" | "partner";
 
@@ -31,6 +42,7 @@ export interface WishCardData {
   hue: Hue;
   /** someone else's wish: claimed by me (true), free (false). Null on my own wishes. */
   claimedByMe: boolean | null;
+  url: string | null;
 }
 
 export interface WishlistScreenProps {
@@ -44,6 +56,22 @@ export interface WishlistScreenProps {
   pendingIds: string[];
   loading: boolean;
   error: string | null;
+  onAddWishPress: () => void;
+  addWish: { open: boolean; onOpenChange: (open: boolean) => void; draft: WishDraft; onDraftChange: (patch: Partial<WishDraft>) => void; onSubmit: () => void; error: string | null };
+  onWishOpen: (id: string) => void;
+  wishSheet: { wish: WishSheetData | null; onClose: () => void; onDelete: (id: string) => void; pending: boolean; error: string | null };
+  onAddGoalPress: () => void;
+  addGoal: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    draft: GoalDraft;
+    onDraftChange: (patch: Partial<GoalDraft>) => void;
+    onSubmit: () => void;
+    error: string | null;
+    canShare: boolean;
+  };
+  onAddSavingsPress: (goalId: string) => void;
+  savings: { goal: SavingsSheetData | null; amount: string; onAmountChange: (amount: string) => void; onClose: () => void; onSubmit: () => void; error: string | null };
 }
 
 const SOFT: Record<Hue, string> = {
@@ -55,9 +83,17 @@ const SOFT: Record<Hue, string> = {
 
 export function WishlistScreen(props: WishlistScreenProps) {
   const { tab, onTabChange, partnerName, goals, mine, partners, onClaimChange, pendingIds, loading, error } = props;
+  const { onAddWishPress, addWish, onWishOpen, wishSheet, onAddGoalPress, addGoal, onAddSavingsPress, savings } = props;
   return (
     <div className="flex flex-col gap-5">
-      <ScreenHeader title="Wishlist" />
+      <ScreenHeader
+        title="Wishlist"
+        actions={
+          <IconButton label="Add a wish" variant="ink" onClick={onAddWishPress}>
+            <PlusIcon />
+          </IconButton>
+        }
+      />
       <Segmented
         label="Whose wishlist"
         value={tab}
@@ -80,9 +116,25 @@ export function WishlistScreen(props: WishlistScreenProps) {
         >
           {tab === "mine" ? (
             <>
-              {goals.length ? (
-                <section className="flex flex-col gap-3">
-                  <SectionHeader title="Saving for" />
+              <section className="flex flex-col gap-3">
+                  <SectionHeader
+                    title="Saving for"
+                    action={
+                      <button type="button" onClick={onAddGoalPress}>
+                        New goal
+                      </button>
+                    }
+                  />
+                  {goals.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={onAddGoalPress}
+                      className="flex items-center gap-2 rounded-row border border-dashed border-line px-4 py-4 text-callout text-ink-muted"
+                    >
+                      <TargetIcon className="size-5 text-accent" aria-hidden />
+                      Saving up for something? Start a goal.
+                    </button>
+                  ) : null}
                   {goals.map((g) => (
                     <div key={g.id} className="flex flex-col gap-3.5 rounded-card bg-surface p-5">
                       <div className="flex items-center justify-between">
@@ -98,10 +150,13 @@ export function WishlistScreen(props: WishlistScreenProps) {
                         <span className="text-callout text-ink-muted">of {g.target}</span>
                       </p>
                       <Progress value={g.progress} label={`${g.title} progress`} />
+                      <Button size="sm" variant="soft" className="self-start" onClick={() => onAddSavingsPress(g.id)}>
+                        <PlusIcon className="size-3.5" aria-hidden />
+                        Add savings
+                      </Button>
                     </div>
                   ))}
-                </section>
-              ) : null}
+              </section>
 
               <section className="flex flex-col gap-3">
                 <SectionHeader title={`Wants · ${mine.length}`} />
@@ -110,14 +165,20 @@ export function WishlistScreen(props: WishlistScreenProps) {
                 ) : (
                   <ul className="grid grid-cols-2 gap-3">
                     {mine.map((w) => (
-                      <ListItem key={w.id} className="flex flex-col gap-2.5 rounded-3xl bg-surface p-2.5 pb-3.5">
-                        <span className={cn("grid h-24 place-items-center rounded-2xl", SOFT[w.hue])} aria-hidden>
-                          <GiftIcon className="size-7" />
-                        </span>
-                        <span className="flex flex-col gap-0.5 px-1">
-                          <span className="text-body-strong">{w.name}</span>
-                          {w.price ? <span className="text-caption text-ink-muted">{w.price}</span> : null}
-                        </span>
+                      <ListItem key={w.id}>
+                        <button
+                          type="button"
+                          onClick={() => onWishOpen(w.id)}
+                          className="flex w-full flex-col gap-2.5 rounded-3xl bg-surface p-2.5 pb-3.5 text-left transition-transform active:scale-[0.98]"
+                        >
+                          <span className={cn("grid h-24 w-full place-items-center rounded-2xl", SOFT[w.hue])} aria-hidden>
+                            <GiftIcon className="size-7" />
+                          </span>
+                          <span className="flex flex-col gap-0.5 px-1">
+                            <span className="text-body-strong">{w.name}</span>
+                            {w.price ? <span className="text-caption text-ink-muted">{w.price}</span> : null}
+                          </span>
+                        </button>
                       </ListItem>
                     ))}
                   </ul>
@@ -140,7 +201,15 @@ export function WishlistScreen(props: WishlistScreenProps) {
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate text-body-strong">{w.name}</span>
-                        {w.price ? <span className="text-caption text-ink-muted">{w.price}</span> : null}
+                        <span className="flex items-center gap-2 text-caption text-ink-muted">
+                          {w.price}
+                          {w.url ? (
+                            <a href={w.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline-offset-2 hover:text-ink hover:underline">
+                              <ExternalLinkIcon className="size-3.5" aria-hidden />
+                              Where to buy
+                            </a>
+                          ) : null}
+                        </span>
                       </span>
                       <AnimatePresence mode="wait" initial={false}>
                         {w.claimedByMe ? (
@@ -172,6 +241,11 @@ export function WishlistScreen(props: WishlistScreenProps) {
           )}
         </motion.div>
       </AnimatePresence>
+
+      <AddWishSheet {...addWish} />
+      <WishSheet {...wishSheet} />
+      <AddGoalSheet {...addGoal} />
+      <SavingsSheet {...savings} />
     </div>
   );
 }

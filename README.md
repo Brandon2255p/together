@@ -31,10 +31,10 @@ email, pair your accounts into a **Together**, and everything after that is shar
 | <img src="docs/screenshots/shopping.png" width="240" alt="Shopping" /> | **Shopping list with autocomplete.** Suggestions come from what you usually buy. Ticked items drop into the basket, and one tap clears it. |
 | <img src="docs/screenshots/chores.png" width="240" alt="Chores" /> | **Chores.** Once-off or recurring (daily, weekly, monthly), with optional due dates and one or more assignees. You can filter by *Mine*, *theirs* or *Shared*. When you finish a recurring chore, it moves to its next date. |
 | <img src="docs/screenshots/add-chore.png" width="240" alt="Add chore" /> | **Add a chore** in a draggable bottom sheet. Set who it's for, when it's due and how often it repeats. |
-| <img src="docs/screenshots/calendar.png" width="240" alt="Calendar" /> | **Shared calendar.** Events are coloured by person, and chores with due dates show up on the same grid and in the day's agenda. |
+| <img src="docs/screenshots/calendar.png" width="240" alt="Calendar" /> | **Shared calendar.** Events are coloured by person, and chores with due dates show up on the same grid and in the day's agenda. Add a plan with **+**; tap one to remove it. |
 | <img src="docs/screenshots/places.png" width="240" alt="Places" /> | **Places.** Paste a Google Maps link (or the text the Maps app shares) and it's matched on Google Places: the real name, its kind, and the suburb, city, province and country. Or just type a name. Each place goes under *Been* or *Want to go*, and the same Google place is never saved twice. |
 | <img src="docs/screenshots/place-detail.png" width="240" alt="Place detail" /> | **Place detail.** Google's photo (with its credit) and rating, the address with today's hours, ratings from each of you, and a visit history with notes. |
-| <img src="docs/screenshots/wishlist.png" width="240" alt="Wishlist" /> | **Wishlist.** Goals you save towards, alone or together, plus the things you'd love. On your partner's list you can quietly claim a gift; they never see who claimed it. |
+| <img src="docs/screenshots/wishlist.png" width="240" alt="Wishlist" /> | **Wishlist.** Goals you save towards, alone or together, plus the things you'd love. On your partner's list you can quietly claim a gift; they never see who claimed it. Add wishes with **+**, start goals and put savings towards them. |
 
 ---
 
@@ -234,6 +234,6 @@ For Supabase auth:
 - [ ] Filtering and grouping places by city, province and country
 - [ ] Members, invites and more than one Together per person
 - [x] Changing your own name, and signing out (`/profile`)
-- [ ] Adding calendar events and wishes from the app
+- [x] Adding and removing calendar plans, wishes and savings goals from the app
 - [ ] Realtime sync between partners
 - [ ] PWA install + push reminders for due chores
