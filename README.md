@@ -233,6 +233,7 @@ For Supabase auth:
 - [ ] Adding places by searching Google (autocomplete), by hand, and editing them
 - [ ] Filtering and grouping places by city, province and country
 - [ ] Members, invites and more than one Together per person
+- [x] Changing your own name, and signing out (`/profile`)
 - [ ] Adding calendar events and wishes from the app
 - [ ] Realtime sync between partners
 - [ ] PWA install + push reminders for due chores

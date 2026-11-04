@@ -21,6 +21,7 @@ const LINKS = {
   shopping: "/lists" as Route,
   places: "/places?tab=want" as Route,
   calendar: "/calendar" as Route,
+  profile: "/profile" as Route,
 };
 
 export function useHomeViewModel(data: HomeViewData) {

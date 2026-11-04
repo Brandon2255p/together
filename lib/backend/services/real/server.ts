@@ -261,6 +261,14 @@ export class RealServerService implements ServerBackendService {
     return error ? notSaved(message(error, "We couldn't rename it. Try again.")) : saved;
   }
 
+  async setMyName({ name }: { name: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const meId = await currentUserId(sb);
+    if (!meId) return notSaved(SIGNED_OUT);
+    const { error } = await sb.from("profiles").update({ name }).eq("id", meId);
+    return error ? notSaved(message(error, "We couldn't change your name. Try again.")) : saved;
+  }
+
   async joinTogether({ code }: { code: string }): Promise<DataResult<Together>> {
     const sb = await createClient();
     const { error } = await sb.rpc("v1_join_together", { p_code: code });

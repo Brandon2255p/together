@@ -30,6 +30,10 @@ export interface ServerBackendService {
   renameTogether(params: { name: string }): Promise<MutationResult>;
   joinTogether(params: { code: string }): Promise<DataResult<Together>>;
 
+  // You
+  /** renames the signed-in person everywhere they appear */
+  setMyName(params: { name: string }): Promise<MutationResult>;
+
   // Shopping
   getShoppingItems(): Promise<DataResult<ShoppingItem[]>>;
   /** the names the autocomplete draws on: this Together's history plus everyone's popular items */
