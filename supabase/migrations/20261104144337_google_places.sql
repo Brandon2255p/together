@@ -1,4 +1,19 @@
 ALTER TABLE "public"."places"
+  DROP CONSTRAINT "places_google_photo_check";
+
+ALTER TABLE "public"."places"
+  DROP CONSTRAINT "places_google_place_id_check";
+
+ALTER TABLE "public"."places"
+  DROP CONSTRAINT "places_google_rating_check";
+
+ALTER TABLE "public"."places"
+  DROP COLUMN "google_photo";
+
+ALTER TABLE "public"."places"
+  DROP COLUMN "google_rating";
+
+ALTER TABLE "public"."places"
   ADD COLUMN "street" text NOT NULL DEFAULT ''::text;
 
 ALTER TABLE "public"."places"
@@ -9,9 +24,6 @@ ALTER TABLE "public"."places"
 
 ALTER TABLE "public"."places"
   ADD COLUMN "country" text NOT NULL DEFAULT ''::text;
-
-ALTER TABLE "public"."places"
-  ADD COLUMN "google_place_id" text;
 
 ALTER TABLE "public"."places"
   ADD COLUMN "lat" double precision;
