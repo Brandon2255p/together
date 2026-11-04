@@ -7,6 +7,7 @@ import { addGoal, addWish, deleteWish, setGoalSaved, setWishClaimed } from "@/li
 import { rands } from "@/lib/format";
 import type { Goal, Member, Together, WishItem } from "@/lib/models";
 import { TEMP, type Optimistic } from "../_lib/optimistic";
+import { useServerState } from "../_lib/server-state";
 
 export interface WishlistViewData {
   together: Together;
@@ -27,9 +28,9 @@ function readRands(text: string): number | null {
 export function useWishlistViewModel(data: WishlistViewData) {
   const { together } = data;
   const [tab, setTab] = useState<WishlistTab>("mine");
-  const [mine, setMine] = useState<Optimistic<WishItem>[]>(data.mine);
-  const [goals, setGoals] = useState<Optimistic<Goal>[]>(data.goals);
-  const [partners, setPartners] = useState(data.partners);
+  const [mine, setMine] = useServerState<Optimistic<WishItem>[]>(data.mine);
+  const [goals, setGoals] = useServerState<Optimistic<Goal>[]>(data.goals);
+  const [partners, setPartners] = useServerState(data.partners);
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const partner = together.members.find((m) => m.id !== together.meId);
