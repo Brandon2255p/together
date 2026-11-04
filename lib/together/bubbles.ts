@@ -9,8 +9,8 @@ const DAY_MS = 86_400_000;
 const HALF_LIFE_DAYS = 3;
 export const MIN_RADIUS = 0.55;
 export const MAX_RADIUS = 1;
-/** the gap left between two bubbles */
-const GAP = 0.12;
+/** the gap left between two bubbles; the blobs wobble outward by up to about a fifth of their size */
+const GAP = 0.35;
 
 /** bigger the more recent the activity: MAX_RADIUS for right now, shrinking toward MIN_RADIUS */
 export function bubbleRadius(lastActivityAt: string, now: number): number {
