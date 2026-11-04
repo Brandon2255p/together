@@ -382,6 +382,32 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."v1_switch_together"(uuid) FROM PUBLIC, "anon";
 
+CREATE OR REPLACE FUNCTION public.v2_chore_reminders()
+  RETURNS TABLE (
+    endpoint text,
+    p256dh   text,
+    auth     text,
+    titles   text[]
+  )
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select s.endpoint, s.p256dh, s.auth, array_agg(distinct c.title order by c.title)
+  from public.push_subscriptions s
+  join public.chore_assignees a on a.profile_id = s.profile_id
+  join public.together_members m on m.together_id = a.together_id and m.profile_id = a.profile_id and m.left_at is null
+  join public.chores c on c.id = a.chore_id
+  join public.togethers t on t.id = c.together_id
+  where c.done_at is null
+    and c.due is not null
+    and c.due <= (now() at time zone t.time_zone)::date
+  group by s.endpoint, s.p256dh, s.auth;
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."v2_chore_reminders"() FROM PUBLIC, "anon", "authenticated";
+
 CREATE OR REPLACE FUNCTION public.v2_create_together (
   p_name text
 )
@@ -585,6 +611,12 @@ REVOKE ALL ON FUNCTION "public"."v1_switch_together"(uuid) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."v1_switch_together"(uuid) TO "postgres";
 
 GRANT EXECUTE ON FUNCTION "public"."v1_switch_together"(uuid) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."v2_chore_reminders"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."v2_chore_reminders"() TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."v2_chore_reminders"() TO "service_role";
 
 GRANT EXECUTE ON FUNCTION "public"."v2_create_together"(text) TO "authenticated";
 

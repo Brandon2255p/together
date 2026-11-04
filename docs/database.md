@@ -138,6 +138,7 @@ Stricter rules sit on top:
 | `v1_remove_member(id)` | Owners: marks someone as left. Not yourself. |
 | `v1_set_member_role(id, role)` | Owners: make someone an owner or a member again; a Together always keeps an owner |
 | `v1_leave_together()` | Marks you as left. The last owner has to hand over first; the last person out deletes the Together. Returns the Together you land in, or null. |
+| `v2_chore_reminders()` | Server job only: devices to remind, with chores due in every Together the person is still in (v1 also reminded people who had left) |
 | `v1_set_chore_done(id, done)` | Once-off: sets `done_at`. Recurring: logs the completion and moves `due` to the next date after today in the Together's time zone. Monthly keeps the day of the month (31 Jan → 28 Feb → 31 Mar). |
 | `v1_item_catalog()` | Your history plus "popular" names. A name counts as popular only when at least 3 Togethers have added it, so one couple's list never leaks. |
 
