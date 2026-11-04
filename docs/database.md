@@ -101,6 +101,9 @@ see. The switcher lists the rest through `v1_list_my_togethers()`.
 **Leaving keeps what you added.** Leaving or being removed sets `together_members.left_at` instead of deleting the
 row. So wishes, claims, assignments and ratings keep a valid foreign key and still show the person's name. Rejoining
 clears `left_at`. There are no write policies on `together_members`: every change goes through the functions below.
+A Together with members but no owner (made before roles existed) treats its first member as the owner:
+`ensure_owner()` promotes them the first time an owner-only function or `v1_leave_together` runs, and the app shows them
+as owner until then.
 
 **Integrity across Togethers.** Child tables repeat `together_id` and use composite foreign keys:
 

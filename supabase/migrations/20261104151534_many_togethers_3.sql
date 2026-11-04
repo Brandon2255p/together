@@ -1,5 +1,28 @@
 SET local check_function_bodies = off;
 
+CREATE OR REPLACE FUNCTION public.ensure_owner (
+  p_together_id uuid
+)
+  RETURNS void
+  LANGUAGE sql
+  SET search_path TO ''
+  AS $function$
+  update public.together_members set role = 'owner'
+  where together_id = p_together_id
+    and profile_id = (
+      select m.profile_id from public.together_members m
+      where m.together_id = p_together_id and m.left_at is null
+      order by m.joined_at, m.profile_id
+      limit 1
+    )
+    and not exists (
+      select 1 from public.together_members o
+      where o.together_id = p_together_id and o.left_at is null and o.role = 'owner'
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."ensure_owner"(uuid) FROM "anon", "authenticated";
+
 CREATE OR REPLACE FUNCTION public.my_people()
   RETURNS SETOF uuid
   LANGUAGE sql

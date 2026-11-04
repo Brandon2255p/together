@@ -18,7 +18,6 @@ REVOKE ALL ON FUNCTION "public"."next_member_tone"(uuid) FROM PUBLIC, "anon", "a
 CREATE OR REPLACE FUNCTION public.require_owner()
   RETURNS uuid
   LANGUAGE plpgsql
-  STABLE
   SET search_path TO ''
   AS $function$
 declare
@@ -27,6 +26,7 @@ begin
   if t_id is null then
     raise exception 'You''re not in a Together yet.' using errcode = 'P0002';
   end if;
+  perform public.ensure_owner(t_id);
   if not exists (
     select 1 from public.together_members
     where together_id = t_id and profile_id = auth.uid() and left_at is null and role = 'owner'
@@ -189,6 +189,7 @@ begin
   end if;
 
   perform 1 from public.together_members where together_id = t_id for update;
+  perform public.ensure_owner(t_id);
   select role into my_role from public.together_members where together_id = t_id and profile_id = me;
 
   if not exists (
@@ -492,6 +493,14 @@ CREATE POLICY "remove own" ON "public"."wishes"
   FOR DELETE
   TO "authenticated"
   USING (((together_id = ( SELECT public.my_together_id() AS my_together_id)) AND (owner_id = ( SELECT auth.uid() AS uid))));
+
+REVOKE ALL ON FUNCTION "public"."ensure_owner"(uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION "public"."ensure_owner"(uuid) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."ensure_owner"(uuid) TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."ensure_owner"(uuid) TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."my_people"() FROM PUBLIC;
 
