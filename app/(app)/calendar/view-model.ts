@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { EventDraft } from "@/components/calendar/add-event-sheet";
 import type { AgendaRow } from "@/components/calendar/calendar-screen";
 import { addEvent, deleteEvent, getEvents } from "@/lib/actions/calendar";
@@ -30,6 +30,27 @@ export function useCalendarViewModel(data: CalendarViewData) {
   const [month, setMonth] = useState({ year: t.getUTCFullYear(), month: t.getUTCMonth() });
   const [selected, setSelected] = useState<DayKey>(today);
   const [events, setEvents] = useState<Optimistic<CalendarEvent>[]>(data.events);
+  // the page loads this month; another month shown here is fetched again when the page reloads (live changes)
+  const [loaded, setLoaded] = useState(data.events);
+  const [stale, setStale] = useState(false);
+  if (loaded !== data.events) {
+    setLoaded(data.events);
+    if (month.year === t.getUTCFullYear() && month.month === t.getUTCMonth()) setEvents(data.events);
+    else setStale(true);
+  }
+  useEffect(() => {
+    if (!stale) return;
+    const { from, to } = gridRange(month.year, month.month);
+    let current = true;
+    void getEvents(from, to).then((result) => {
+      if (!current) return;
+      setStale(false);
+      if (result.data) setEvents(result.data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [stale, month]);
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<EventDraft>(() => emptyDraft(today, together.meId));
   const [addError, setAddError] = useState<string | null>(null);

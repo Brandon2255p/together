@@ -9,6 +9,7 @@ import { addDays, dayAndMonth, dueLabel, todayKey } from "@/lib/format";
 import type { GooglePlaceDetails, Place, Together } from "@/lib/models";
 import { hoursLabel } from "@/lib/places/preview";
 import { TEMP } from "../../_lib/optimistic";
+import { useServerState } from "../../_lib/server-state";
 
 export interface PlaceDetailViewData {
   place: Place;
@@ -37,7 +38,8 @@ function footnote(place: Place, together: Together): string {
 }
 
 export function usePlaceDetailViewModel({ place: initial, google, together }: PlaceDetailViewData) {
-  const [place, setPlace] = useState(initial);
+  // live sync: takes the newest place when the page reloads it (the other person logged a visit, say)
+  const [place, setPlace] = useServerState(initial);
   const today = todayKey();
   const yesterday = addDays(today, -1);
   const blank: VisitDraft = { day: today, title: "", note: "", rating: place.ratings[together.meId] ?? null };

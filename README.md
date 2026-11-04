@@ -235,5 +235,5 @@ For Supabase auth:
 - [ ] Members, invites and more than one Together per person
 - [x] Changing your own name, and signing out (`/profile`)
 - [x] Adding and removing calendar plans, wishes and savings goals from the app
-- [ ] Realtime sync between partners
+- [x] Realtime sync between partners (Supabase Realtime; pages reload their data when the other person changes something)
 - [ ] PWA install + push reminders for due chores

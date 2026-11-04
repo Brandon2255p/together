@@ -60,6 +60,11 @@ async function fails(label, user, sql, params, pattern) {
 const one = async (user, sql, params) => (await as(user, sql, params)).rows[0];
 const rows = async (user, sql, params) => (await as(user, sql, params)).rows;
 
+// realtime
+const published = (await db.query("select tablename from pg_publication_tables where pubname = 'supabase_realtime'")).rows.map((r) => r.tablename);
+check("realtime covers goals, visits and members", ["goals", "goal_owners", "visits", "place_ratings", "event_attendees", "together_members", "profiles"].every((t) => published.includes(t)), published.join(", "));
+check("realtime leaves out wish_claims (surprises stay surprises)", !published.includes("wish_claims"));
+
 // profiles
 check("profiles created from auth.users", (await db.query("select count(*)::int n from public.profiles")).rows[0].n === 4);
 
