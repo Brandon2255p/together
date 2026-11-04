@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { AppTab } from "@/components/layout/app-shell";
 import { browserBackend } from "@/lib/backend/browser";
+import { setUpPwa } from "./_lib/pwa";
 
 const TABS: AppTab[] = ["home", "lists", "calendar", "places", "wishlist"];
 /** a burst of changes (a chore and its assignees, say) becomes one refresh */
@@ -51,6 +52,7 @@ const FORMS = [/^\/places\/new(\/|$)/, /^\/places\/[^/]+\/edit$/];
 /** which tab the URL is under (routing stays out of the components) */
 export function useAppShellViewModel() {
   useLiveTogether();
+  useEffect(setUpPwa, []);
   const pathname = usePathname();
   const segment = pathname.split("/")[1] ?? "";
   const active = (TABS as string[]).includes(segment) ? (segment as AppTab) : null;

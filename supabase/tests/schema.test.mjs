@@ -13,7 +13,7 @@ const migration = files.map((f) => `-- ${f}\n${readFileSync(join(supabaseDir, f)
 const db = new PGlite();
 
 await db.exec(`
-  create role anon nologin; create role authenticated nologin;
+  create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
   create schema auth;
   create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
   create function auth.uid() returns uuid language sql stable as
@@ -186,6 +186,28 @@ await db.exec("set role anon");
 try { await db.query("select public.v1_create_together('x')"); check("anon can't call v1_create_together", false); }
 catch (e) { check("anon can't call v1_create_together", /permission denied/.test(e.message), e.message); }
 finally { await db.exec("reset role"); }
+
+
+// push reminders
+const sub = (n) => [`https://push.example.com/${n}`, "p256dh-key", "auth-secret"];
+await as("brandon", "select public.v1_save_push_subscription($1, $2, $3)", sub("phone"));
+check("you see your own push subscription", (await rows("brandon", "select * from public.push_subscriptions")).length === 1);
+check("others don't see it", (await rows("adele", "select * from public.push_subscriptions")).length === 0);
+await fails("can't add a subscription for someone else", "adele", "insert into public.push_subscriptions (endpoint, profile_id, p256dh, auth) values ('https://push.example.com/x', $1, 'k', 'a')", [U.brandon], /row-level security|permission denied/);
+await as("adele", "select public.v1_save_push_subscription($1, $2, $3)", sub("phone"));
+check(
+  "a device that changes hands moves to its new owner",
+  (await rows("brandon", "select * from public.push_subscriptions")).length === 0 && (await rows("adele", "select * from public.push_subscriptions")).length === 1,
+);
+await fails("signed-in people can't read everyone's reminders", "adele", "select * from public.v1_chore_reminders()", [], /permission denied/);
+await as("brandon", "select public.v1_save_push_subscription($1, $2, $3)", sub("laptop"));
+const { id: overdue } = await one("brandon", "insert into public.chores (title, due) values ('Water the plants', current_date - 1) returning id");
+await as("brandon", "insert into public.chore_assignees (chore_id, profile_id) values ($1, auth.uid())", [overdue]);
+await db.exec("set role service_role");
+const reminders = (await db.query("select * from public.v1_chore_reminders()")).rows;
+await db.exec("reset role");
+check("reminders list overdue chores for the assignee's devices", reminders.find((r) => r.endpoint.endsWith("/laptop"))?.titles.includes("Water the plants"), JSON.stringify(reminders));
+check("no reminder for chores you're not on", !reminders.some((r) => r.endpoint.endsWith("/phone") && r.titles.includes("Water the plants")));
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);

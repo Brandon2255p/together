@@ -99,6 +99,11 @@ Open <http://localhost:3000>. The app runs on the **stub backend** by default, s
 | `SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_URL` | Where the **server** reaches Supabase, when that differs from the browser's address |
 | `GOOGLE_MAPS_API_KEY` | – | Optional, server only. A key with the Places API (New) enabled, restricted to that API and the server's IP (a key restricted to websites is refused). Without it, places keep what the Maps link says. |
 
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | – | Optional, for chore reminders (Web Push). Make a pair with `pnpm dlx web-push generate-vapid-keys`. Read at runtime. |
+| `VAPID_SUBJECT` | – | A `mailto:` or `https:` contact for push services |
+| `CRON_SECRET` | – | Protects `GET /api/cron/chore-reminders`, the daily reminder job (Vercel Cron sends it for you) |
+| `SUPABASE_SECRET_KEY` | – | Server only, used by the reminder job alone: it reads every Together's due chores |
+
 `.env.local` is gitignored. Never commit real keys.
 
 ---
@@ -236,4 +241,4 @@ For Supabase auth:
 - [x] Changing your own name, and signing out (`/profile`)
 - [x] Adding and removing calendar plans, wishes and savings goals from the app
 - [x] Realtime sync between partners (Supabase Realtime; pages reload their data when the other person changes something)
-- [ ] PWA install + push reminders for due chores
+- [x] PWA install + push reminders for due chores (`/profile`; a daily job at 07:00 SAST)

@@ -251,6 +251,21 @@ export type NewWish = Pick<WishItem, "name" | "price" | "url">;
 
 export type NewGoal = Pick<Goal, "title" | "target" | "ownerIds">;
 
+// ---- Reminders ------------------------------------------------------------
+
+/** a browser's or installed app's Web Push subscription (PushSubscription.toJSON()) */
+export interface PushSubscriptionKeys {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+/** one device to remind, and the chores due today or overdue for the person signed in on it */
+export interface ChoreReminder {
+  subscription: PushSubscriptionKeys;
+  titles: string[];
+}
+
 // ---- Results --------------------------------------------------------------
 
 /** A read from the backend: the data, or null and the error */

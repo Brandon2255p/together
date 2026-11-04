@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { ChevronLeftIcon, LogOutIcon, UserRoundIcon } from "lucide-react";
+import { BellIcon, BellOffIcon, ChevronLeftIcon, DownloadIcon, LogOutIcon, ShareIcon, UserRoundIcon } from "lucide-react";
 import type { Member } from "@/lib/models";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -26,10 +26,28 @@ export interface ProfileScreenProps {
   onSignOut: () => void;
   backHref: Route;
   error: string | null;
+  reminders: "loading" | "on" | "off" | "unsupported" | "needs-install" | "denied" | "no-keys";
+  remindersPending: boolean;
+  onRemindersToggle: () => void;
+  /** "prompt": the browser can install it with a tap; "ios": explain Share → Add to Home Screen */
+  install: "prompt" | "ios" | null;
+  onInstall: () => void;
 }
+
+const REMINDER_NOTES: Record<ProfileScreenProps["reminders"], string> = {
+  loading: "",
+  on: "We'll nudge this device in the morning when chores are due.",
+  off: "A morning nudge on this device when chores are due.",
+  unsupported: "This browser can't show reminders.",
+  "needs-install": "Add Together to your Home Screen first, then turn reminders on there.",
+  denied: "Notifications are blocked for Together. Allow them in your browser's settings, then come back.",
+  "no-keys": "Reminders aren't set up on this server yet.",
+};
 
 export function ProfileScreen(props: ProfileScreenProps) {
   const { me, togetherName, name, onNameChange, canSave, saving, note, onSave, signingOut, onSignOut, backHref, error } = props;
+  const { reminders, remindersPending, onRemindersToggle, install, onInstall } = props;
+  const canToggle = reminders === "on" || reminders === "off";
   return (
     <Reveal className="flex flex-col gap-6">
       <RevealItem className="flex flex-col gap-4">
@@ -69,6 +87,50 @@ export function ProfileScreen(props: ProfileScreenProps) {
           </Button>
         </form>
       </RevealItem>
+
+      <RevealItem className="flex flex-col gap-3">
+        <SectionHeader title="Reminders" />
+        <div className="flex flex-col gap-3 rounded-card bg-surface p-4">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+              {reminders === "on" ? <BellIcon className="size-5" aria-hidden /> : <BellOffIcon className="size-5" aria-hidden />}
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <span className="text-body-strong">Chores due today</span>
+              <span className="text-caption text-ink-muted" aria-live="polite">
+                {REMINDER_NOTES[reminders]}
+              </span>
+            </span>
+          </div>
+          {canToggle ? (
+            <Button variant={reminders === "on" ? "outline" : "primary"} size="md" pending={remindersPending} onClick={onRemindersToggle}>
+              {reminders === "on" ? "Turn off reminders" : "Turn on reminders"}
+            </Button>
+          ) : null}
+        </div>
+      </RevealItem>
+
+      {install ? (
+        <RevealItem className="flex flex-col gap-3">
+          <SectionHeader title="On your phone" />
+          <div className="flex flex-col gap-3 rounded-card bg-surface p-4">
+            <span className="text-body-strong">Add Together to your Home Screen</span>
+            {install === "prompt" ? (
+              <>
+                <span className="text-caption text-ink-muted">It opens full screen, like an app.</span>
+                <Button size="md" variant="soft" onClick={onInstall}>
+                  <DownloadIcon className="size-4" aria-hidden />
+                  Install Together
+                </Button>
+              </>
+            ) : (
+              <span className="flex flex-wrap items-center gap-1 text-caption text-ink-muted">
+                In Safari, tap Share <ShareIcon className="inline size-4" aria-label="(the share icon)" /> then “Add to Home Screen”.
+              </span>
+            )}
+          </div>
+        </RevealItem>
+      ) : null}
 
       <RevealItem>
         <Button block variant="ghost" onClick={onSignOut} pending={signingOut}>

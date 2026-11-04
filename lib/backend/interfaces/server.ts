@@ -4,6 +4,7 @@ import type {
   NewEvent,
   NewGoal,
   NewWish,
+  PushSubscriptionKeys,
   Chore,
   DataResult,
   DayKey,
@@ -39,6 +40,9 @@ export interface ServerBackendService {
   // You
   /** renames the signed-in person everywhere they appear */
   setMyName(params: { name: string }): Promise<MutationResult>;
+  /** remembers this device for chore reminders; a device that changes hands moves to whoever is signed in */
+  savePushSubscription(params: PushSubscriptionKeys): Promise<MutationResult>;
+  deletePushSubscription(params: { endpoint: string }): Promise<MutationResult>;
 
   // Shopping
   getShoppingItems(): Promise<DataResult<ShoppingItem[]>>;
