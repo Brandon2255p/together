@@ -71,8 +71,8 @@ export function usePlacesViewModel(data: PlacesViewData) {
     places: g.places.map(toCard),
   }));
 
-  // the sheet counts both tabs: it's about where your places are, not which list they're on
-  const options = filterOptions(places, draft);
+  // the sheet counts the places on this tab (Been or Want to go), like the list it filters
+  const options = filterOptions(onTab, draft);
 
   function openSheet() {
     setDraft(filter);
@@ -113,7 +113,7 @@ export function usePlacesViewModel(data: PlacesViewData) {
       options: { country: options.countries, province: options.provinces, city: options.cities },
       selected: { country: draft.country, province: draft.province, city: draft.city },
       onSelect: (level: AreaLevel, value: string) =>
-        setDraft((d) => narrowFilter(places, withParents(places, { ...d, [level]: d[level] === value ? "" : value }))),
+        setDraft((d) => narrowFilter(onTab, withParents(onTab, { ...d, [level]: d[level] === value ? "" : value }))),
       sort: draft.sort,
       sorts: SORTS.map((value) => ({
         value,
@@ -123,7 +123,7 @@ export function usePlacesViewModel(data: PlacesViewData) {
       onSortChange: (sort: PlaceSort) => setDraft((d) => ({ ...d, sort })),
       onClear: () => setDraft(NO_FILTER),
       onApply: () => void apply(),
-      matching: applyFilter(places, draft).length,
+      matching: applyFilter(onTab, draft).length,
     },
   };
 }

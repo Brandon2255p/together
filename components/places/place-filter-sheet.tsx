@@ -26,7 +26,7 @@ export interface PlaceFilterSheetProps {
   onSortChange: (sort: PlaceSort) => void;
   onClear: () => void;
   onApply: () => void;
-  /** how many places the choices leave, across both tabs */
+  /** how many places on this tab the choices leave */
   matching: number;
 }
 

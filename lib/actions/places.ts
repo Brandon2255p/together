@@ -45,11 +45,13 @@ const SESSION_TOKEN = /^[A-Za-z0-9-]{8,64}$/;
 const GOOGLE_ID = /^[A-Za-z0-9_-]{1,300}$/;
 const MAX_QUERY = 120;
 
-/** Autocomplete for Add a place (21a). Empty for a blank query or a bad token; Google errors come back as []. */
+/** Autocomplete for Add a place (21a), without roads. Empty for a blank query or a bad token; Google errors come back as []. */
 export async function autocompletePlaces(input: string, sessionToken: string, near: Coordinates | null): Promise<PlaceSuggestion[]> {
   const text = input.trim().slice(0, MAX_QUERY);
   if (text.length < 2 || !SESSION_TOKEN.test(sessionToken)) return [];
-  return serverBackend.autocompletePlaces({ input: text, sessionToken, near: validCoordinates(near) });
+  const suggestions = await serverBackend.autocompletePlaces({ input: text, sessionToken, near: validCoordinates(near) });
+  // places you'd go to, not streets
+  return suggestions.filter((s) => !s.road);
 }
 
 /** The preview (21b): fresh details with rating, price, hours and photo. Ends the autocomplete session. */
