@@ -48,6 +48,17 @@ export class StubServerService implements ServerBackendService {
     return done;
   }
 
+  async setMyName({ name }: { name: string }) {
+    await wait();
+    log("setMyName", { name });
+    const t = state().together;
+    const me = t?.members.find((m) => m.id === t.meId);
+    if (!me) return { success: false, error: "You're not in a Together yet." };
+    me.name = name;
+    me.initial = name.charAt(0).toUpperCase();
+    return done;
+  }
+
   async joinTogether({ code }: { code: string }) {
     await wait();
     log("joinTogether", { code });
