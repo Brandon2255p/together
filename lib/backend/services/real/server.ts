@@ -165,10 +165,13 @@ const fromJson = (m: MemberJson) => ({ id: m.id, name: m.name, initial: m.name.c
 
 function toTogether(row: TogetherRow, meId: MemberId): Together {
   const byJoin = [...row.together_members].sort((a, b) => a.joined_at.localeCompare(b.joined_at));
+  const members = byJoin.filter((m) => m.left_at === null).map(toMember);
+  // a Together from before roles has no owner yet: the first member is (ensure_owner() in the schema makes it so)
+  if (members.length && !members.some((m) => m.role === "owner")) members[0] = { ...members[0]!, role: "owner" };
   return {
     id: row.id,
     name: row.name,
-    members: byJoin.filter((m) => m.left_at === null).map(toMember),
+    members,
     formerMembers: byJoin.filter((m) => m.left_at !== null).map(toMember),
     meId,
     inviteCode: row.invite_code,

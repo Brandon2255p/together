@@ -18,6 +18,7 @@ begin
   end if;
 
   perform 1 from public.together_members where together_id = t_id for update;
+  perform public.ensure_owner(t_id);
   select role into my_role from public.together_members where together_id = t_id and profile_id = me;
 
   if not exists (

@@ -246,6 +246,14 @@ check("the last owner can leave when nobody else is left", (await one("brandon",
 check("…and the Together is deleted", (await db.query("select count(*)::int n from public.togethers where id = $1", [tF])).rows[0].n === 0);
 check("Fred has no Together left", (await one("fred", "select public.my_together_id() id")).id === null);
 
+// Togethers from before roles: the first member counts as owner
+const tOld = (await one("adele", "select public.v2_create_together('Old one') id")).id;
+const oldCode = (await one("adele", "select invite_code from public.togethers")).invite_code;
+await as("eve", "select public.v2_join_together($1)", [oldCode]);
+await db.query("update public.together_members set role = 'member' where together_id = $1", [tOld]);
+await fails("a later member still can't act as owner", "eve", "select * from public.v1_new_invite_code()", [], /Only an owner/);
+check("the first member becomes owner when nobody is", (await rows("adele", "select * from public.v1_new_invite_code()")).length === 1 && (await owner(tOld)).join() === U.adele);
+
 // anon
 await db.exec("set role anon");
 try { await db.query("select public.v1_create_together('x')"); check("anon can't call v1_create_together", false); }
