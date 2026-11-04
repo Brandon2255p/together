@@ -32,8 +32,8 @@ email, pair your accounts into a **Together**, and everything after that is shar
 | <img src="docs/screenshots/chores.png" width="240" alt="Chores" /> | **Chores.** Once-off or recurring (daily, weekly, monthly), with optional due dates and one or more assignees. You can filter by *Mine*, *theirs* or *Shared*. When you finish a recurring chore, it moves to its next date. |
 | <img src="docs/screenshots/add-chore.png" width="240" alt="Add chore" /> | **Add a chore** in a draggable bottom sheet. Set who it's for, when it's due and how often it repeats. |
 | <img src="docs/screenshots/calendar.png" width="240" alt="Calendar" /> | **Shared calendar.** Events are coloured by person, and chores with due dates show up on the same grid and in the day's agenda. |
-| <img src="docs/screenshots/places.png" width="240" alt="Places" /> | **Places.** Paste a Google Maps link or just type a name. Each place goes under *Been* or *Want to go*. |
-| <img src="docs/screenshots/place-detail.png" width="240" alt="Place detail" /> | **Place detail.** Ratings from each of you, a visit history with notes, and a link to open the place in Maps. |
+| <img src="docs/screenshots/places.png" width="240" alt="Places" /> | **Places.** Paste a Google Maps link (or the text the Maps app shares) and it's matched on Google Places: the real name, its kind, and the suburb, city, province and country. Or just type a name. Each place goes under *Been* or *Want to go*, and the same Google place is never saved twice. |
+| <img src="docs/screenshots/place-detail.png" width="240" alt="Place detail" /> | **Place detail.** Google's photo (with its credit) and rating, the address with today's hours, ratings from each of you, and a visit history with notes. |
 | <img src="docs/screenshots/wishlist.png" width="240" alt="Wishlist" /> | **Wishlist.** Goals you save towards, alone or together, plus the things you'd love. On your partner's list you can quietly claim a gift; they never see who claimed it. |
 
 ---
@@ -47,6 +47,7 @@ email, pair your accounts into a **Together**, and everything after that is shar
 | Motion | [Motion](https://motion.dev) for springs, shared layouts and drag-to-dismiss sheets |
 | 3D | three.js + @react-three/fiber: a simplex-noise shader orb, lazy-loaded with a CSS fallback and turned off for reduced motion |
 | Auth & data | Supabase (`@supabase/ssr`) email OTP. An in-memory **stub backend** runs by default. |
+| Places | [Google Places API (New)](https://developers.google.com/maps/documentation/places/web-service/op-overview), called only from the server. Optional. |
 | Icons / inputs | lucide-react, input-otp |
 | Tooling | TypeScript 6 (strict), ESLint 9 with import-boundary rules, Vitest, pnpm |
 | Hosting | Vercel → `together.openprocess.me` |
@@ -72,6 +73,8 @@ Open <http://localhost:3000>. The app runs on the **stub backend** by default, s
 - Any email works. **Any 6-digit code signs you in**, except `000000`, which fails so you can see the error state.
 - You're signed in as **Brandon**, paired with **Adele**, with a few weeks of seed data relative to today.
 - State lives in memory for as long as the dev server runs. Every backend call logs `[stub] …` to the terminal.
+- Google Places is canned too: links to Nobu, Zeitz MOCAA or Woodlands Boulevard match those places, and any other
+  link gets a made-up match, so adding places works offline.
 
 ### Scripts
 
@@ -93,6 +96,8 @@ Open <http://localhost:3000>. The app runs on the **stub backend** by default, s
 | `NEXT_PUBLIC_USE_STUB_DATABASE` | `true` | Browser side: stub auth, and `proxy.ts` skips the session check |
 | `NEXT_PUBLIC_SUPABASE_URL` | – | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | – | Supabase publishable (anon) key |
+| `SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_URL` | Where the **server** reaches Supabase, when that differs from the browser's address |
+| `GOOGLE_MAPS_API_KEY` | – | Optional, server only. A key with the Places API (New) enabled, restricted to that API and the server's IP (a key restricted to websites is refused). Without it, places keep what the Maps link says. |
 
 `.env.local` is gitignored. Never commit real keys.
 
@@ -105,7 +110,8 @@ happens in view-models and server pages.** Components are pure UI, and ESLint en
 
 ```
 lib/models/            Models: domain types (Member, Together, Chore, Place, WishItem…). No logic, no IO.
-lib/<feature>/         Pure helpers that shape models for the UI (month grid, suggestions, maps-link parsing). Tested.
+lib/<feature>/         Pure helpers that shape models for the UI (month grid, suggestions, Maps links, Google types). Tested.
+lib/google/            Google Places API (New) client, server only, used by the Supabase backend
 lib/backend/
 ├── interfaces/        The contract: ServerBackendService (data) + BrowserBackendService (auth)
 ├── services/stub/     In-memory stub with seed data
@@ -139,11 +145,14 @@ or `app/**`. When a component needs to do something, it takes a callback prop (`
 view-model provides it.
 
 **Optimistic updates.** View-models update local state first, call the server action, then roll back and set an error
-if it fails. For an example, see `app/(app)/_lib/use-chores.ts`.
+if it fails. Rows that were added optimistically keep their React key once saved, so they don't animate twice. For an
+example, see `app/(app)/_lib/use-chores.ts`.
 
-**Swapping in Supabase.** `services/real/server.ts` implements `ServerBackendService`. Currently every method returns
-a "not connected yet" error. Fill those in, set `USE_STUB_DATABASE=false`, and nothing above the backend layer
-changes.
+**Loading.** Every tab has a `loading.tsx` skeleton (`components/ui/skeleton.tsx`), so a tap shows the screen's
+shape straight away while the server loads its data, and the tab bar's pill moves on tap.
+
+**Stub or Supabase.** `services/real/server.ts` implements `ServerBackendService` on Supabase, and
+`services/stub/server.ts` on seed data. `USE_STUB_DATABASE` picks one, and nothing above the backend layer changes.
 
 ### Routes
 
@@ -167,6 +176,8 @@ folders, and migrations are generated from it with `just create-migration <name>
 - Row-level security keeps each couple's data to themselves.
 - Composite foreign keys stop rows from crossing between Togethers.
 - Wish claims live in their own table, so the database hides them from the wish's owner.
+- Places from Google keep only what Google's terms allow: the place id, and coordinates for 30 days. The rating,
+  hours, photo and street are fetched fresh each time a place is shown.
 
 The ER diagram, the reasoning and the setup steps are in **[docs/database.md](docs/database.md)**.
 
@@ -216,8 +227,12 @@ For Supabase auth:
 ## Roadmap
 
 - [x] Supabase schema and row-level security ([docs/database.md](docs/database.md))
-- [ ] The real `ServerBackendService` on top of it
+- [x] The real `ServerBackendService` on top of it
+- [x] Places matched on Google Places from a Maps link
 - [ ] Logging visits and ratings from place detail
+- [ ] Adding places by searching Google (autocomplete), by hand, and editing them
+- [ ] Filtering and grouping places by city, province and country
+- [ ] Members, invites and more than one Together per person
 - [ ] Adding calendar events and wishes from the app
 - [ ] Realtime sync between partners
 - [ ] PWA install + push reminders for due chores

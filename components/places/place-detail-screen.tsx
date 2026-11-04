@@ -22,23 +22,43 @@ const HERO: Record<Hue, string> = {
   warning: "from-[#e59e2e] to-[#ffe6bd]",
 };
 
+/** a photo from Google, shown with its photographer's credit (Google requires it) */
+export interface PlacePhoto {
+  url: string;
+  credit: string | null;
+  creditUrl: string | null;
+}
+
+export interface PlaceAddressCard {
+  /** street and suburb */
+  line1: string;
+  /** city · province · country */
+  line2: string | null;
+  /** today's hours, when Google knows them */
+  hours: { text: string; open: boolean } | null;
+  /** opens the place in Google Maps */
+  href: string;
+  /** shows Google's attribution */
+  fromGoogle: boolean;
+}
+
 export interface PlaceDetailScreenProps {
   name: string;
   hue: Hue;
   /** fills the hero when there is one */
-  photoUrl: string | null;
+  photo: PlacePhoto | null;
   /** the rating on Google Maps */
   googleRating: number | null;
   tags: { label: string; tone: "neutral" | "success" | "partner" }[];
   ratings: { member: Member; value: number | null }[];
-  mapsUrl: string | null;
+  address: PlaceAddressCard;
   visits: { id: string; day: string; month: string; title: string; note: string | null; rating: number | null }[];
   backHref: Route;
   onLogVisit: () => void;
 }
 
 export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
-  const { name, hue, photoUrl, googleRating, tags, ratings, mapsUrl, visits, backHref, onLogVisit } = props;
+  const { name, hue, photo, googleRating, tags, ratings, address, visits, backHref, onLogVisit } = props;
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 300], [0, 90]);
   const pinScale = useTransform(scrollY, [0, 200], [1, 0.8]);
@@ -52,9 +72,14 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
         <motion.span style={{ scale: pinScale }} className="text-on-accent">
           <MapPinIcon className="size-14" strokeWidth={1.5} aria-hidden />
         </motion.span>
-        {photoUrl ? <Photo src={photoUrl} sizes="(max-width: 440px) 100vw, 440px" priority /> : null}
-        {/* keeps the back button readable on a bright photo */}
-        {photoUrl ? <div className="absolute inset-x-0 top-0 h-28 bg-linear-to-b from-black/30 to-transparent" aria-hidden /> : null}
+        {photo ? (
+          <>
+            <Photo src={photo.url} sizes="(max-width: 440px) 100vw, 440px" priority />
+            {/* keeps the back button readable on a bright photo */}
+            <div className="absolute inset-x-0 top-0 h-28 bg-linear-to-b from-black/30 to-transparent" aria-hidden />
+            <PhotoCredit photo={photo} />
+          </>
+        ) : null}
         <div className="absolute inset-x-5 top-[max(1rem,env(safe-area-inset-top))] flex justify-between">
           <Link href={backHref} aria-label="Back to places" className={iconButtonVariants({ variant: "glass" })}>
             <ChevronLeftIcon />
@@ -72,9 +97,9 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
               </Chip>
             ))}
             {googleRating !== null ? (
-              <Chip>
+              <Chip tone="warning">
                 <Rating value={googleRating} className="text-inherit" />
-                <span>on Google</span>
+                <span>Google</span>
               </Chip>
             ) : null}
           </div>
@@ -98,20 +123,28 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
           ))}
         </RevealItem>
 
-        {mapsUrl ? (
-          <RevealItem>
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-3 rounded-row bg-surface px-4 py-3.5 text-callout"
-            >
-              <NavigationIcon className="size-[18px] text-partner" aria-hidden />
-              <span className="flex-1">Open in Google Maps</span>
-              <ChevronRightIcon className="size-[18px] text-ink-subtle" aria-hidden />
-            </a>
-          </RevealItem>
-        ) : null}
+        <RevealItem className="flex flex-col gap-1.5">
+          <a
+            href={address.href}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${address.line1}. Open in Google Maps`}
+            className="flex items-center gap-3 rounded-row bg-surface px-4 py-3.5"
+          >
+            <NavigationIcon className="size-[18px] shrink-0 text-partner" aria-hidden />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-body-strong">{address.line1}</span>
+              {address.line2 ? <span className="truncate text-caption text-ink-muted">{address.line2}</span> : null}
+              {address.hours ? (
+                <span className={cn("text-caption", address.hours.open ? "text-success-ink" : "text-ink-muted")}>
+                  {address.hours.text}
+                </span>
+              ) : null}
+            </span>
+            <ChevronRightIcon className="size-[18px] shrink-0 text-ink-subtle" aria-hidden />
+          </a>
+          {address.fromGoogle ? <p className="px-1 text-right text-caption text-ink-subtle">Google Maps</p> : null}
+        </RevealItem>
 
         <RevealItem className="flex flex-col gap-3 pb-4">
           <SectionHeader title={`Visits · ${visits.length}`} />
@@ -144,5 +177,18 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
         </RevealItem>
       </Reveal>
     </div>
+  );
+}
+
+/** "Photo: Thandi M. · Google Maps", linking to the photographer's profile when Google gives one */
+function PhotoCredit({ photo }: { photo: PlacePhoto }) {
+  const label = photo.credit ? `Photo: ${photo.credit} · Google Maps` : "Photo: Google Maps";
+  const className = "absolute bottom-12 left-5 rounded-full bg-black/60 px-2.5 py-1 text-caption text-white";
+  return photo.creditUrl ? (
+    <a href={photo.creditUrl} target="_blank" rel="noreferrer" className={className}>
+      {label}
+    </a>
+  ) : (
+    <span className={className}>{label}</span>
   );
 }

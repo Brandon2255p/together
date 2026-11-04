@@ -1,7 +1,8 @@
 import "server-only";
 import { addDays } from "@/lib/format";
 import type { ServerBackendService } from "@/lib/backend/interfaces/server";
-import type { Chore, DataResult, MutationResult, NewPlace, Place, PlaceMatch, PlaceQuery, Together } from "@/lib/models";
+import type { Chore, Coordinates, DataResult, MutationResult, NewPlace, Place, PlaceQuery, Together } from "@/lib/models";
+import { stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
 import { ADELE, BRANDON, seed, type StubState } from "@/lib/backend/services/stub/seed";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis).
@@ -146,31 +147,53 @@ export class StubServerService implements ServerBackendService {
     return place ? ok(place) : fail<Place>("We couldn't find that place.");
   }
 
-  async addPlace({ name, area, category, mapsUrl, status, google }: NewPlace) {
+  async addPlace(place: NewPlace) {
     await wait();
-    log("addPlace", { name, area, category, mapsUrl, status, google });
+    log("addPlace", place);
     const hues = ["accent", "partner", "success", "warning"] as const;
     const s = state();
-    const place: Place = {
-      id: id("p"), name, category: category ?? "Saved place", area: area ?? (mapsUrl ? "From Google Maps" : "Added by hand"),
-      mapsUrl, status, ratings: {}, visits: [], hue: hues[s.places.length % hues.length] ?? "accent",
-      googleRating: google?.rating ?? null, photoUrl: null,
+    const existing = place.googlePlaceId ? s.places.find((p) => p.googlePlaceId === place.googlePlaceId) : undefined;
+    if (existing) return ok(existing);
+    const added: Place = {
+      id: id("p"),
+      name: place.name,
+      category: place.category ?? "Saved place",
+      area: place.area || (place.mapsUrl ? "From Google Maps" : "Added by hand"),
+      street: place.street,
+      city: place.city,
+      province: place.province,
+      country: place.country,
+      mapsUrl: place.mapsUrl,
+      status: place.status,
+      ratings: {},
+      visits: [],
+      hue: hues[s.places.length % hues.length] ?? "accent",
+      googlePlaceId: place.googlePlaceId,
+      location: place.location ? { ...place.location, fetchedAt: new Date().toISOString() } : null,
     };
-    s.places.unshift(place);
-    return ok(place);
+    s.places.unshift(added);
+    return ok(added);
   }
 
-  /** no Google here: a made-up match for anything saved from a Maps link, so the details show up */
-  async lookUpPlace(query: PlaceQuery): Promise<PlaceMatch | null> {
+  async setPlaceLocation({ id: placeId, location }: { id: string; location: Coordinates }) {
     await wait();
-    log("lookUpPlace", query);
-    const name = query.text.split(",")[0]?.trim() ?? query.text;
-    return { placeId: `stub-${name}`, name, category: "Restaurant", area: null, rating: 4.4, photo: null };
+    log("setPlaceLocation", { id: placeId, location });
+    const place = state().places.find((p) => p.id === placeId);
+    if (place) place.location = { ...location, fetchedAt: new Date().toISOString() };
+    return place ? done : { success: false, error: "We couldn't find that place." };
   }
 
-  async getPlacePhotoUrl({ id: placeId }: { id: string }) {
-    log("getPlacePhotoUrl", { id: placeId });
-    return Promise.resolve(null);
+  /** no Google here: canned places (Nobu, Zeitz, Woodlands), or a made-up one for any other link */
+  async findPlaceFromLink(query: PlaceQuery) {
+    await wait();
+    log("findPlaceFromLink", query);
+    return stubFindPlace(query);
+  }
+
+  async getGooglePlace({ placeId, extras }: { placeId: string; extras: boolean; sessionToken?: string }) {
+    await wait();
+    log("getGooglePlace", { placeId, extras });
+    return stubGetPlace(placeId, extras);
   }
 
   async getWishes({ ownerId }: { ownerId: string }) {

@@ -16,8 +16,9 @@ import type {
   MutationResult,
   NewChore,
   NewPlace,
+  Coordinates,
+  GooglePlaceDetails,
   Place,
-  PlaceMatch,
   PlaceQuery,
   PlaceStatus,
   ShoppingItem,
@@ -25,7 +26,7 @@ import type {
   WishItem,
 } from "@/lib/models";
 import { createClient } from "@/lib/supabase/server";
-import { photoUrl, searchPlace } from "./google-places";
+import { findPlaceId, getPlace as getGooglePlaceDetails } from "@/lib/google/places";
 
 // The Supabase implementation. Every call runs as the signed-in user, so row-level security (supabase/schemas) decides
 // what they see: queries never filter by Together themselves. Writes that need more than one table's rules go through
@@ -80,8 +81,14 @@ interface PlaceRow {
   maps_url: string | null;
   status: PlaceStatus;
   hue: Hue;
-  google_rating: number | string | null;
-  google_photo: string | null;
+  street: string;
+  city: string;
+  province: string;
+  country: string;
+  google_place_id: string | null;
+  lat: number | null;
+  lng: number | null;
+  location_fetched_at: string | null;
   place_ratings: { profile_id: string; rating: number }[];
   visits: { id: string; day: string; title: string; note: string | null; rating: number | null }[];
 }
@@ -109,7 +116,7 @@ interface GoalRow {
 const TOGETHER_SELECT = "id, name, invite_code, together_members (profile_id, tone, profiles (name))";
 const CHORE_SELECT = "id, title, due, repeat, done_at, chore_assignees (profile_id)";
 const PLACE_SELECT =
-  "id, name, category, area, maps_url, status, hue, google_rating, google_photo, place_ratings (profile_id, rating), visits (id, day, title, note, rating)";
+  "id, name, category, area, street, city, province, country, maps_url, status, hue, google_place_id, lat, lng, location_fetched_at, place_ratings (profile_id, rating), visits (id, day, title, note, rating)";
 
 // ---- Mapping rows to models ---------------------------------------------------
 
@@ -162,9 +169,15 @@ const toPlace = (row: PlaceRow): Place => ({
   ratings: Object.fromEntries(row.place_ratings.map((r) => [r.profile_id, r.rating])),
   visits: [...row.visits].sort((a, b) => b.day.localeCompare(a.day)),
   hue: row.hue,
-  // numeric comes back as a string from PostgREST
-  googleRating: row.google_rating === null ? null : Number(row.google_rating),
-  photoUrl: row.google_photo ? `/api/places/${row.id}/photo` : null,
+  street: row.street,
+  city: row.city,
+  province: row.province,
+  country: row.country,
+  googlePlaceId: row.google_place_id,
+  location:
+    row.lat !== null && row.lng !== null && row.location_fetched_at
+      ? { lat: row.lat, lng: row.lng, fetchedAt: row.location_fetched_at }
+      : null,
 });
 
 function toWish(row: WishRow): WishItem {
@@ -402,45 +415,61 @@ export class RealServerService implements ServerBackendService {
     return data ? ok(toPlace(data)) : fail("We couldn't find that place.");
   }
 
-  async addPlace({ name, area, category, mapsUrl, status, google }: NewPlace): Promise<DataResult<Place>> {
+  async addPlace(place: NewPlace): Promise<DataResult<Place>> {
     const sb = await createClient();
     const hues: Hue[] = ["accent", "partner", "success", "warning"];
     const { count } = await sb.from("places").select("id", { count: "exact", head: true });
     const { data, error } = await sb
       .from("places")
       .insert({
-        name,
-        category: category ?? "Saved place",
-        area: area ?? (mapsUrl ? "From Google Maps" : "Added by hand"),
-        maps_url: mapsUrl,
-        google_place_id: google?.placeId ?? null,
-        google_rating: google?.rating ?? null,
-        google_photo: google?.photo ?? null,
-        status,
+        name: place.name,
+        category: place.category ?? "Saved place",
+        area: place.area || (place.mapsUrl ? "From Google Maps" : "Added by hand"),
+        street: place.street,
+        city: place.city,
+        province: place.province,
+        country: place.country,
+        maps_url: place.mapsUrl,
+        status: place.status,
         hue: hues[(count ?? 0) % hues.length],
+        google_place_id: place.googlePlaceId,
+        lat: place.location?.lat ?? null,
+        lng: place.location?.lng ?? null,
+        location_fetched_at: place.location ? new Date().toISOString() : null,
       })
       .select(PLACE_SELECT)
       .single()
       .overrideTypes<PlaceRow, { merge: false }>();
+    // 23505: this Google place is already saved in this Together, so hand back that one
+    if (error?.code === "23505" && place.googlePlaceId) {
+      const existing = await sb
+        .from("places")
+        .select(PLACE_SELECT)
+        .eq("google_place_id", place.googlePlaceId)
+        .maybeSingle()
+        .overrideTypes<PlaceRow | null, { merge: false }>();
+      if (existing.data) return ok(toPlace(existing.data));
+    }
     if (error) return fail(message(error, "We couldn't save that place. Try again."));
     return ok(toPlace(data));
   }
 
-  async lookUpPlace(query: PlaceQuery): Promise<PlaceMatch | null> {
-    return searchPlace(query);
+  async setPlaceLocation({ id, location }: { id: string; location: Coordinates }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb
+      .from("places")
+      .update({ lat: location.lat, lng: location.lng, location_fetched_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) return notSaved(message(error, "We couldn't update that place."));
+    return saved;
   }
 
-  async getPlacePhotoUrl({ id }: { id: string }): Promise<string | null> {
-    const sb = await createClient();
-    // row-level security: only a place in your Together, so nobody can spend our Google quota on other photos
-    const { data, error } = await sb
-      .from("places")
-      .select("google_photo")
-      .eq("id", id)
-      .maybeSingle()
-      .overrideTypes<{ google_photo: string | null } | null, { merge: false }>();
-    if (error && error.code !== "22P02") console.error("[supabase]", error);
-    return data?.google_photo ? photoUrl(data.google_photo) : null;
+  async findPlaceFromLink(query: PlaceQuery): Promise<string | null> {
+    return findPlaceId(query);
+  }
+
+  async getGooglePlace(params: { placeId: string; extras: boolean; sessionToken?: string }): Promise<GooglePlaceDetails | null> {
+    return getGooglePlaceDetails(params.placeId, params);
   }
 
   // ---- Wishlist -----------------------------------------------------------------

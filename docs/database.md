@@ -126,6 +126,13 @@ Stricter rules sit on top:
 
 `togethers` has no insert policy, so you can only create or join one through these functions.
 
+**Places from Google.** Google's terms only let us store a place's id for good, and its coordinates for 30 days. So a
+place saved from a Maps link keeps `google_place_id` (one row per Google place per Together), `lat`/`lng` with
+`location_fetched_at` (refreshed when the place is opened and the coordinates are over 30 days old), and our own
+`area`/`city`/`province`/`country` labels, prefilled from Google for filtering and grouping. The street, rating, hours
+and photo are fetched fresh when the place is shown (`lib/google/places.ts`). `street` is only filled for places
+added by hand.
+
 **Triggers.**
 
 - A profile is created for every new auth user. The name comes from sign-up metadata, or the part of the email before the `@`.

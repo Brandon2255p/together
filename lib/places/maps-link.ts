@@ -1,3 +1,5 @@
+import type { Coordinates } from "@/lib/models";
+
 const MAPS_HOST = /(^|\.)google\.[a-z.]+$|^maps\.app\.goo\.gl$|^goo\.gl$/i;
 const SHORT_HOST = /^maps\.app\.goo\.gl$|^goo\.gl$/i;
 const URL_IN_TEXT = /https?:\/\/\S+/i;
@@ -18,10 +20,6 @@ export interface PlaceDetails {
   coordinates: Coordinates | null;
 }
 
-export interface Coordinates {
-  lat: number;
-  lng: number;
-}
 
 /**
  * Reads what the user pasted: a plain name, a Google Maps link, or the text the Maps app shares

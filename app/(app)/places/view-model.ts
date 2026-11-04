@@ -36,7 +36,6 @@ function toCard(p: Optimistic<Place>): PlaceCardData {
     subtitle: `${p.category} · ${p.area}`,
     hue: p.hue,
     rating: averageRating(p),
-    photoUrl: p.photoUrl ?? null,
     badge: p.status === "been" ? `Visited ${p.visits.length}×` : null,
     href: `/places/${p.id}` as Route,
     pending: p.id.startsWith(TEMP),
@@ -67,8 +66,12 @@ export function usePlacesViewModel(data: PlacesViewData) {
       ratings: {},
       visits: [],
       hue: HUES[places.length % HUES.length] ?? "accent",
-      googleRating: null,
-      photoUrl: null,
+      street: "",
+      city: "",
+      province: "",
+      country: "",
+      googlePlaceId: null,
+      location: null,
     };
     setError(null);
     setInput("");
@@ -80,7 +83,12 @@ export function usePlacesViewModel(data: PlacesViewData) {
       return setError(result.error ?? "Couldn't save that place.");
     }
     const added = result.data;
-    setPlaces((ps) => ps.map((p) => (p.id === tempId ? { ...added, clientKey: tempId } : p)));
+    // a Google place that's already saved comes back as the existing one: drop the placeholder instead of doubling it
+    setPlaces((ps) =>
+      ps.some((p) => p.id === added.id)
+        ? ps.filter((p) => p.id !== tempId)
+        : ps.map((p) => (p.id === tempId ? { ...added, clientKey: tempId } : p)),
+    );
   }
 
   return {
