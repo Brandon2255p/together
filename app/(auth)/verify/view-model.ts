@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { browserBackend } from "@/lib/backend/browser";
 import { getTogether } from "@/lib/actions/together";
-import { recallEmail } from "../email";
+import { recallEmail, recallNext } from "../email";
 
 const RESEND_SECONDS = 30;
 const noop = () => () => {};
@@ -38,6 +39,8 @@ export function useVerifyViewModel() {
       setCode("");
       return;
     }
+    const next = recallNext();
+    if (next) return router.replace(next as Route);
     const together = await getTogether();
     router.replace(together.data ? "/home" : "/onboarding/together");
   }

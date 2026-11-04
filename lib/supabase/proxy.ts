@@ -31,6 +31,9 @@ export async function updateSession(request: NextRequest) {
   if (!signedIn && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
+    url.search = "";
+    // a join link comes back to itself after signing in
+    if (request.nextUrl.pathname.startsWith("/join/")) url.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
   return response;

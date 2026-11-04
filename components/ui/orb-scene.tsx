@@ -30,7 +30,8 @@ float snoise(vec3 v){
   return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
 }`;
 
-const vertexShader = /* glsl */ `
+/** the morphing-blob shaders; also used by the Together bubbles (components/together/bubble-scene.tsx) */
+export const vertexShader = /* glsl */ `
 uniform float uTime;
 uniform vec2 uPointer;
 varying vec3 vNormal;
@@ -50,7 +51,7 @@ void main(){
   gl_Position = projectionMatrix * mv;
 }`;
 
-const fragmentShader = /* glsl */ `
+export const fragmentShader = /* glsl */ `
 uniform vec3 uA;
 uniform vec3 uB;
 uniform vec3 uC;

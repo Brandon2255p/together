@@ -323,7 +323,9 @@ export class RealServerService implements ServerBackendService {
 
   async getInvitePreview({ code }: { code: string }): Promise<DataResult<InvitePreview>> {
     const sb = await createClient();
-    const { data, error } = await sb.rpc("v1_invite_preview", { p_code: code });
+    const result = await sb.rpc("v1_invite_preview", { p_code: code });
+    const { error } = result;
+    const data: unknown = result.data;
     if (error) return fail(message(error, "We couldn't check that code. Try again."));
     const row = (data as InvitePreviewRow[] | null)?.[0];
     if (!row) return { data: null };
@@ -338,7 +340,9 @@ export class RealServerService implements ServerBackendService {
 
   async listMyTogethers(): Promise<DataResult<TogetherSummary[]>> {
     const sb = await createClient();
-    const { data, error } = await sb.rpc("v1_list_my_togethers");
+    const result = await sb.rpc("v1_list_my_togethers");
+    const { error } = result;
+    const data: unknown = result.data;
     if (error) return fail(message(error, "We couldn't load your Togethers."));
     return ok(((data as TogetherSummaryRow[] | null) ?? []).map(toSummary));
   }
@@ -351,7 +355,9 @@ export class RealServerService implements ServerBackendService {
 
   async newInviteCode(): Promise<DataResult<InviteCode>> {
     const sb = await createClient();
-    const { data, error } = await sb.rpc("v1_new_invite_code");
+    const result = await sb.rpc("v1_new_invite_code");
+    const { error } = result;
+    const data: unknown = result.data;
     if (error) return fail(message(error, "We couldn't make a new code. Try again."));
     const row = (data as { invite_code: string; invite_expires_at: string }[] | null)?.[0];
     return row ? ok({ code: row.invite_code, expiresAt: row.invite_expires_at }) : fail(TRY_AGAIN);
@@ -371,7 +377,9 @@ export class RealServerService implements ServerBackendService {
 
   async leaveTogether(): Promise<DataResult<{ nextTogetherId: string | null }>> {
     const sb = await createClient();
-    const { data, error } = await sb.rpc("v1_leave_together");
+    const result = await sb.rpc("v1_leave_together");
+    const { error } = result;
+    const data: unknown = result.data;
     if (error) return fail(message(error, "We couldn't take you out of it. Try again."));
     return ok({ nextTogetherId: (data as string | null) ?? null });
   }

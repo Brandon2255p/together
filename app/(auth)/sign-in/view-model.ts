@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { browserBackend } from "@/lib/backend/browser";
-import { rememberEmail } from "../email";
+import { rememberEmail, rememberNext } from "../email";
 
-export function useSignInViewModel() {
+/** `next`: a join link to come back to after signing in */
+export function useSignInViewModel(next: string | null = null) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
@@ -26,6 +27,7 @@ export function useSignInViewModel() {
       return;
     }
     rememberEmail(address);
+    rememberNext(next);
     router.push("/verify");
   }
 

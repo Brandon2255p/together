@@ -2,7 +2,7 @@
 
 import type { Route } from "next";
 import { dueLabel, greeting, hourNow, longDate } from "@/lib/format";
-import type { CalendarEvent, Chore, DayKey, Member, Together } from "@/lib/models";
+import type { CalendarEvent, Chore, DayKey, Member, Together, TogetherSummary } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
 import { useChores } from "../_lib/use-chores";
 
@@ -14,6 +14,8 @@ export interface HomeViewData {
   wantToGo: number;
   /** today onwards, for "Up next" */
   events: CalendarEvent[];
+  /** all your Togethers, for the switcher pill */
+  togethers: TogetherSummary[];
 }
 
 const LINKS = {
@@ -21,6 +23,8 @@ const LINKS = {
   shopping: "/lists" as Route,
   places: "/places?tab=want" as Route,
   calendar: "/calendar" as Route,
+  together: "/together" as Route,
+  togethers: "/togethers" as Route,
 };
 
 export function useHomeViewModel(data: HomeViewData) {
@@ -48,6 +52,11 @@ export function useHomeViewModel(data: HomeViewData) {
     greeting: `${greeting(hourNow())}, ${me?.name ?? "you"}`,
     dateLabel: longDate(today),
     members: together.members,
+    switcher: {
+      name: together.name,
+      tone: me?.tone ?? "accent",
+      hasNews: data.togethers.some((t) => !t.current && t.hasNews),
+    },
     upNext,
     dueToday,
     onChoreDoneChange: (id: string, done: boolean) => void toggle(id, done),

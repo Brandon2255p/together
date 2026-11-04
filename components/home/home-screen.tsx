@@ -4,7 +4,8 @@ import Link from "next/link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
 import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon } from "lucide-react";
-import type { Member } from "@/lib/models";
+import type { Member, MemberTone } from "@/lib/models";
+import { SwitcherPill } from "@/components/together/switcher-pill";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
 import { AvatarStack } from "@/components/ui/avatar";
 import { IconBadge, InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
@@ -15,12 +16,14 @@ export interface HomeScreenProps {
   greeting: string;
   dateLabel: string;
   members: Member[];
+  /** the switcher pill: the current Together, and whether another one has news */
+  switcher: { name: string; tone: MemberTone; hasNews: boolean };
   upNext: { title: string; when: string; where: string | null; people: Member[] } | null;
   dueToday: ChoreRowData[];
   onChoreDoneChange: (id: string, done: boolean) => void;
   toBuy: number;
   wantToGo: number;
-  links: { chores: Route; shopping: Route; places: Route; calendar: Route };
+  links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route };
   error: string | null;
 }
 
@@ -37,11 +40,20 @@ function Tile({ href, icon, tone, count, label }: { href: Route; icon: React.Rea
 }
 
 export function HomeScreen(props: HomeScreenProps) {
-  const { greeting, dateLabel, members, upNext, dueToday, onChoreDoneChange, toBuy, wantToGo, links, error } = props;
+  const { greeting, dateLabel, members, switcher, upNext, dueToday, onChoreDoneChange, toBuy, wantToGo, links, error } = props;
   return (
     <Reveal className="flex flex-col gap-5">
-      <RevealItem>
-        <ScreenHeader eyebrow={dateLabel} title={greeting} actions={<AvatarStack members={members} size="lg" />} />
+      <RevealItem className="flex flex-col gap-3">
+        <SwitcherPill {...switcher} href={links.togethers} className="self-start" />
+        <ScreenHeader
+          eyebrow={dateLabel}
+          title={greeting}
+          actions={
+            <Link href={links.together} aria-label={`Who's in ${switcher.name}`} className="rounded-full transition-transform active:scale-95">
+              <AvatarStack members={members.slice(0, 4)} size="lg" />
+            </Link>
+          }
+        />
       </RevealItem>
 
       <RevealItem>
