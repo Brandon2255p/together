@@ -608,6 +608,35 @@ export class RealServerService implements ServerBackendService {
     return ok(toEvent(row));
   }
 
+  async updateEvent({ id, title, day, time, location, attendees }: { id: string } & NewEvent): Promise<DataResult<CalendarEvent>> {
+    const sb = await createClient();
+    const { data, error } = await sb.from("events").update({ title, day, start_time: time, location }).eq("id", id).select("id");
+    if (error) return fail(message(error, "We couldn't save that plan. Try again."));
+    if (!data.length) return fail("That plan was removed.");
+
+    if (attendees.length) {
+      const add = await sb
+        .from("event_attendees")
+        .upsert(
+          attendees.map((profile_id) => ({ event_id: id, profile_id })),
+          { onConflict: "event_id,profile_id", ignoreDuplicates: true }
+        );
+      if (add.error) return fail(message(add.error, "We couldn't change who's going. Try again."));
+    }
+    const others = sb.from("event_attendees").delete().eq("event_id", id);
+    const drop = attendees.length ? await others.not("profile_id", "in", `(${attendees.join(",")})`) : await others;
+    if (drop.error) return fail(message(drop.error, "We couldn't change who's going. Try again."));
+
+    const { data: row, error: readError } = await sb
+      .from("events")
+      .select("id, title, day, start_time, location, event_attendees (profile_id)")
+      .eq("id", id)
+      .single()
+      .overrideTypes<EventRow, { merge: false }>();
+    if (readError) return fail(message(readError, "We couldn't load that plan."));
+    return ok(toEvent(row));
+  }
+
   async deleteEvent({ id }: { id: string }): Promise<MutationResult> {
     const sb = await createClient();
     const { error } = await sb.from("events").delete().eq("id", id);

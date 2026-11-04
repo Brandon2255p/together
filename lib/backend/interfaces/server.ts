@@ -87,6 +87,8 @@ export interface ServerBackendService {
   /** events from `from` to `to`, both included */
   getEvents(params: { from: DayKey; to: DayKey }): Promise<DataResult<CalendarEvent[]>>;
   addEvent(params: NewEvent): Promise<DataResult<CalendarEvent>>;
+  /** changes what, when, where and who's going */
+  updateEvent(params: { id: string } & NewEvent): Promise<DataResult<CalendarEvent>>;
   deleteEvent(params: { id: string }): Promise<MutationResult>;
 
   // Places

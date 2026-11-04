@@ -7,6 +7,7 @@ import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, UserRoundIcon 
 import type { Member, MemberTone } from "@/lib/models";
 import { ManagePill } from "@/components/together/manage-pill";
 import { SwitcherPill } from "@/components/together/switcher-pill";
+import { AddChoreSheet, type AddChoreSheetProps } from "@/components/lists/add-chore-sheet";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
 import { AvatarStack } from "@/components/ui/avatar";
 import { iconButtonVariants } from "@/components/ui/icon-button";
@@ -23,6 +24,9 @@ export interface HomeScreenProps {
   upNext: { title: string; when: string; where: string | null; people: Member[] } | null;
   dueToday: ChoreRowData[];
   onChoreDoneChange: (id: string, done: boolean) => void;
+  /** opens a chore in the chore sheet to edit it */
+  onChoreOpen: (id: string) => void;
+  choreSheet: AddChoreSheetProps;
   toBuy: number;
   wantToGo: number;
   links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route; profile: Route };
@@ -42,7 +46,7 @@ function Tile({ href, icon, tone, count, label }: { href: Route; icon: React.Rea
 }
 
 export function HomeScreen(props: HomeScreenProps) {
-  const { greeting, dateLabel, members, switcher, upNext, dueToday, onChoreDoneChange, toBuy, wantToGo, links, error } = props;
+  const { greeting, dateLabel, members, switcher, upNext, dueToday, onChoreDoneChange, onChoreOpen, choreSheet, toBuy, wantToGo, links, error } = props;
   return (
     <Reveal className="flex flex-col gap-5">
       <RevealItem className="flex flex-col gap-3">
@@ -94,7 +98,7 @@ export function HomeScreen(props: HomeScreenProps) {
             <AnimatePresence initial={false}>
               {dueToday.map((row) => (
                 <ListItem key={row.key ?? row.id}>
-                  <ChoreRow row={row} onDoneChange={onChoreDoneChange} />
+                  <ChoreRow row={row} onDoneChange={onChoreDoneChange} onOpen={onChoreOpen} />
                 </ListItem>
               ))}
             </AnimatePresence>
@@ -114,6 +118,7 @@ export function HomeScreen(props: HomeScreenProps) {
           <Tile href={links.places} icon={<MapPinIcon aria-hidden />} tone="partner" count={wantToGo} label="places to try" />
         </div>
       </RevealItem>
+      <AddChoreSheet {...choreSheet} />
     </Reveal>
   );
 }

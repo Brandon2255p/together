@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import type { EventDraft } from "@/components/calendar/add-event-sheet";
 import type { AgendaRow } from "@/components/calendar/calendar-screen";
-import { addEvent, deleteEvent, getEvents } from "@/lib/actions/calendar";
+import { addEvent, deleteEvent, getEvents, updateEvent } from "@/lib/actions/calendar";
 import { agendaFor, gridRange, monthGrid } from "@/lib/calendar/month";
 import { dayDate, monthName, shortDay, toKey } from "@/lib/format";
 import { TEMP, type Optimistic } from "../_lib/optimistic";
 import type { CalendarEvent, Chore, DayKey, Member, Together } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
+import { useChoreSheet } from "../_lib/use-chore-sheet";
 import { useChores } from "../_lib/use-chores";
 
 export interface CalendarViewData {
@@ -54,12 +55,16 @@ export function useCalendarViewModel(data: CalendarViewData) {
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<EventDraft>(() => emptyDraft(today, together.meId));
   const [addError, setAddError] = useState<string | null>(null);
+  // the plan open in the add sheet to change it; null when adding a new one
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const { chores, error: choreError, toggle } = useChores(data.chores);
+  const choreStore = useChores(data.chores);
+  const { chores, error: choreError, toggle } = choreStore;
+  const choreSheet = useChoreSheet(together, today, choreStore);
 
   const toneOf = (id: string) => together.members.find((m) => m.id === id)?.tone;
   const people = (ids: string[]) => ids.map((id) => together.members.find((m) => m.id === id)).filter((m): m is Member => !!m);
@@ -78,6 +83,28 @@ export function useCalendarViewModel(data: CalendarViewData) {
     setEvents(result.data);
   }
 
+  /** optimistic too: the change shows at once; if saving fails it goes back, and the sheet opens again with the draft */
+  async function onUpdate(id: string, event: Omit<CalendarEvent, "id">) {
+    const before = events;
+    const submitted = draft;
+    setEvents((es) => es.map((e) => (e.id === id ? { ...e, ...event } : e)));
+    setSelected(event.day);
+    setAddOpen(false);
+    setAddError(null);
+    const result = await updateEvent(id, event);
+    if (!result.data) {
+      setEvents(before);
+      setDraft(submitted);
+      setAddError(result.error ?? "Couldn't save that plan.");
+      setAddOpen(true);
+      return;
+    }
+    const saved = result.data;
+    setEditingId(null);
+    setDraft(emptyDraft(event.day, together.meId));
+    setEvents((es) => es.map((e) => (e.id === id ? { ...saved, clientKey: e.clientKey } : e)));
+  }
+
   /** optimistic: the plan shows straight away, and goes again if saving fails */
   async function onAdd() {
     const title = draft.title.trim();
@@ -89,6 +116,7 @@ export function useCalendarViewModel(data: CalendarViewData) {
       location: draft.location.trim() || null,
       attendees: draft.attendees,
     };
+    if (editingId) return onUpdate(editingId, event);
     const tempId = `${TEMP}${Date.now()}`;
     setEvents((es) => [...es, { ...event, id: tempId }]);
     setSelected(draft.day);
@@ -103,6 +131,16 @@ export function useCalendarViewModel(data: CalendarViewData) {
     }
     const saved = result.data;
     setEvents((es) => es.map((e) => (e.id === tempId ? { ...saved, clientKey: tempId } : e)));
+  }
+
+  function onEdit(id: string) {
+    const e = events.find((x) => x.id === id);
+    if (!e || id.startsWith(TEMP)) return;
+    setOpenId(null);
+    setEditingId(id);
+    setDraft({ title: e.title, day: e.day, time: e.time ?? "", location: e.location ?? "", attendees: e.attendees });
+    setAddError(null);
+    setAddOpen(true);
   }
 
   async function onDelete(id: string) {
@@ -139,10 +177,14 @@ export function useCalendarViewModel(data: CalendarViewData) {
     agendaTitle: selected === today ? `Today · ${shortDay(selected)}` : shortDay(selected),
     agenda,
     onChoreDoneChange: (id: string, done: boolean) => void toggle(id, done),
+    onChoreOpen: choreSheet.openEdit,
+    choreSheet: choreSheet.sheet,
     loading,
     error: loadError ?? choreError,
     onAddPress: () => {
-      setDraft((d) => ({ ...d, day: selected }));
+      // coming from an edit: start a fresh draft
+      setDraft((d) => (editingId ? emptyDraft(selected, together.meId) : { ...d, day: selected }));
+      setEditingId(null);
       setAddError(null);
       setAddOpen(true);
     },
@@ -156,6 +198,7 @@ export function useCalendarViewModel(data: CalendarViewData) {
       onSubmit: () => void onAdd(),
       pending: false,
       error: addError,
+      mode: editingId ? ("edit" as const) : ("add" as const),
     },
     onEventOpen: (id: string) => {
       setDeleteError(null);
@@ -172,6 +215,7 @@ export function useCalendarViewModel(data: CalendarViewData) {
           }
         : null,
       onClose: () => setOpenId(null),
+      onEdit,
       onDelete: (id: string) => void onDelete(id),
       pending: deleting,
       error: deleteError,

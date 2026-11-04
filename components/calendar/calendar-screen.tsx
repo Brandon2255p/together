@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeftIcon, ChevronRightIcon, CoffeeIcon, PlusIcon } from "lucide-react";
 import type { MonthDay } from "@/lib/calendar/month";
 import type { DayKey, Member, MemberTone } from "@/lib/models";
+import { AddChoreSheet, type AddChoreSheetProps } from "@/components/lists/add-chore-sheet";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
 import { AvatarStack, TONE_BG } from "@/components/ui/avatar";
 import { IconButton } from "@/components/ui/icon-button";
@@ -30,6 +31,9 @@ export interface CalendarScreenProps {
   agendaTitle: string;
   agenda: AgendaRow[];
   onChoreDoneChange: (id: string, done: boolean) => void;
+  /** opens a chore in the chore sheet to edit it */
+  onChoreOpen: (id: string) => void;
+  choreSheet: AddChoreSheetProps;
   loading: boolean;
   error: string | null;
   onAddPress: () => void;
@@ -38,6 +42,7 @@ export interface CalendarScreenProps {
   eventSheet: {
     event: EventSheetData | null;
     onClose: () => void;
+    onEdit: (id: string) => void;
     onDelete: (id: string) => void;
     pending: boolean;
     error: string | null;
@@ -50,7 +55,7 @@ const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 export function CalendarScreen(props: CalendarScreenProps) {
   const { monthLabel, yearLabel, weeks, today, selected, onSelect, onPrevMonth, onNextMonth, legend, agendaTitle, agenda, onChoreDoneChange, loading, error } = props;
-  const { onAddPress, addSheet, onEventOpen, eventSheet } = props;
+  const { onAddPress, addSheet, onEventOpen, eventSheet, onChoreOpen, choreSheet } = props;
   return (
     <div className="flex flex-col gap-4">
       <ScreenHeader
@@ -176,7 +181,7 @@ export function CalendarScreen(props: CalendarScreenProps) {
                 </ListItem>
               ) : (
                 <ListItem key={entry.id}>
-                  <ChoreRow row={entry.row} onDoneChange={onChoreDoneChange} />
+                  <ChoreRow row={entry.row} onDoneChange={onChoreDoneChange} onOpen={onChoreOpen} />
                 </ListItem>
               )
             )}
@@ -186,6 +191,7 @@ export function CalendarScreen(props: CalendarScreenProps) {
 
       <AddEventSheet {...addSheet} />
       <EventSheet {...eventSheet} />
+      <AddChoreSheet {...choreSheet} />
     </div>
   );
 }

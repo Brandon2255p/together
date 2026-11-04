@@ -373,6 +373,15 @@ export class StubServerService implements ServerBackendService {
     return ok(added);
   }
 
+  async updateEvent({ id: eventId, ...changes }: { id: string } & NewEvent) {
+    await wait();
+    log("updateEvent", { id: eventId, ...changes });
+    const event = state().events.find((e) => e.id === eventId);
+    if (!event) return fail<CalendarEvent>("That plan was removed.");
+    Object.assign(event, changes);
+    return ok(event);
+  }
+
   async deleteEvent({ id: eventId }: { id: string }) {
     await wait();
     log("deleteEvent", { id: eventId });
