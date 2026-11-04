@@ -16,6 +16,9 @@ import type {
   Coordinates,
   GooglePlaceDetails,
   PlaceQuery,
+  NewVisit,
+  PlaceChanges,
+  PlaceSuggestion,
   ShoppingItem,
   Together,
   WishItem,
@@ -65,8 +68,18 @@ export interface ServerBackendService {
   addPlace(params: NewPlace): Promise<DataResult<Place>>;
   /** refreshes a Google place's coordinates (Google lets us keep them 30 days) */
   setPlaceLocation(params: { id: string; location: Coordinates }): Promise<MutationResult>;
+  /** saves the Edit place screen; with `google` it becomes that Google place (one already saved here is refused) */
+  updatePlace(params: { id: string } & PlaceChanges): Promise<DataResult<Place>>;
+  /** forgets the Google place (and its coordinates): it becomes a place added by hand */
+  unlinkPlace(params: { id: string }): Promise<MutationResult>;
+  /** deletes a place with its visits and ratings, for everyone in the Together */
+  deletePlace(params: { id: string }): Promise<MutationResult>;
+  /** saves a visit (the place moves to Been) and, with a rating, sets the signed-in member's own rating */
+  logVisit(params: NewVisit): Promise<DataResult<Place>>;
 
   // Google Places: best effort, null when there's no match, no API key, or Google doesn't answer
+  /** Autocomplete while typing in Add a place; [] when Google doesn't answer. One `sessionToken` per add, ended by Details. */
+  autocompletePlaces(params: { input: string; sessionToken: string; near: Coordinates | null }): Promise<PlaceSuggestion[]>;
   /** the Google place a pasted Maps link points at, from its name and pin */
   findPlaceFromLink(params: PlaceQuery): Promise<string | null>;
   /** fresh details to save or show (never stored); `extras` adds the rating, hours and photo */

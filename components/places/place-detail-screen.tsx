@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { motion, useScroll, useTransform } from "motion/react";
-import { ChevronLeftIcon, ChevronRightIcon, MapPinIcon, NavigationIcon, StarIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, EllipsisIcon, MapPinIcon, NavigationIcon, StarIcon } from "lucide-react";
 import type { Hue, Member } from "@/lib/models";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -54,11 +54,13 @@ export interface PlaceDetailScreenProps {
   address: PlaceAddressCard;
   visits: { id: string; day: string; month: string; title: string; note: string | null; rating: number | null }[];
   backHref: Route;
+  /** Edit place (22) */
+  editHref: Route;
   onLogVisit: () => void;
 }
 
 export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
-  const { name, hue, photo, googleRating, tags, ratings, address, visits, backHref, onLogVisit } = props;
+  const { name, hue, photo, googleRating, tags, ratings, address, visits, backHref, editHref, onLogVisit } = props;
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 300], [0, 90]);
   const pinScale = useTransform(scrollY, [0, 200], [1, 0.8]);
@@ -83,6 +85,9 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
         <div className="absolute inset-x-5 top-[max(1rem,env(safe-area-inset-top))] flex justify-between">
           <Link href={backHref} aria-label="Back to places" className={iconButtonVariants({ variant: "glass" })}>
             <ChevronLeftIcon />
+          </Link>
+          <Link href={editHref} aria-label="Edit place" className={iconButtonVariants({ variant: "glass" })}>
+            <EllipsisIcon />
           </Link>
         </div>
       </motion.div>
@@ -150,7 +155,7 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
           <SectionHeader title={`Visits · ${visits.length}`} />
           {visits.length === 0 ? (
             <p className="rounded-row bg-surface px-4 py-4 text-callout text-ink-muted">
-              You haven&apos;t been yet. Log it when you go.
+              No visits logged yet. Log one when you go.
             </p>
           ) : (
             <ul className="flex flex-col gap-2.5">

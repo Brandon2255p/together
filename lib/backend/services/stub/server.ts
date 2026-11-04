@@ -11,13 +11,15 @@ import type {
   NewEvent,
   NewGoal,
   NewPlace,
+  NewVisit,
   NewWish,
   Place,
+  PlaceChanges,
   PlaceQuery,
   Together,
   WishItem,
 } from "@/lib/models";
-import { stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
+import { stubAutocomplete, stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
 import { ADELE, BRANDON, seed, type StubState } from "@/lib/backend/services/stub/seed";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis).
@@ -200,7 +202,7 @@ export class StubServerService implements ServerBackendService {
       id: id("p"),
       name: place.name,
       category: place.category ?? "Saved place",
-      area: place.area || (place.mapsUrl ? "From Google Maps" : "Added by hand"),
+      area: place.area,
       street: place.street,
       city: place.city,
       province: place.province,
@@ -223,6 +225,62 @@ export class StubServerService implements ServerBackendService {
     const place = state().places.find((p) => p.id === placeId);
     if (place) place.location = { ...location, fetchedAt: new Date().toISOString() };
     return place ? done : { success: false, error: "We couldn't find that place." };
+  }
+
+  async updatePlace({ id: placeId, google, ...changes }: { id: string } & PlaceChanges) {
+    await wait();
+    log("updatePlace", { id: placeId, google, ...changes });
+    const s = state();
+    const place = s.places.find((p) => p.id === placeId);
+    if (!place) return fail<Place>("We couldn't find that place.");
+    if (google && s.places.some((p) => p.id !== placeId && p.googlePlaceId === google.placeId)) {
+      return fail<Place>("That place is already in your list.");
+    }
+    Object.assign(place, changes);
+    if (google) {
+      place.googlePlaceId = google.placeId;
+      place.location = google.location ? { ...google.location, fetchedAt: new Date().toISOString() } : null;
+      place.street = "";
+    }
+    return ok(place);
+  }
+
+  async unlinkPlace({ id: placeId }: { id: string }) {
+    await wait();
+    log("unlinkPlace", { id: placeId });
+    const place = state().places.find((p) => p.id === placeId);
+    if (!place) return { success: false, error: "We couldn't find that place." };
+    place.googlePlaceId = null;
+    place.location = null;
+    return done;
+  }
+
+  async deletePlace({ id: placeId }: { id: string }) {
+    await wait();
+    log("deletePlace", { id: placeId });
+    const s = state();
+    s.places = s.places.filter((p) => p.id !== placeId);
+    return done;
+  }
+
+  async logVisit(visit: NewVisit) {
+    await wait();
+    log("logVisit", visit);
+    const s = state();
+    const place = s.places.find((p) => p.id === visit.placeId);
+    if (!place) return fail<Place>("We couldn't find that place.");
+    place.visits.unshift({ id: id("v"), day: visit.day, title: visit.title, note: visit.note, rating: visit.rating });
+    place.visits.sort((a, b) => b.day.localeCompare(a.day));
+    place.status = "been";
+    const me = s.together?.meId ?? BRANDON.id;
+    if (visit.rating !== null) place.ratings[me] = visit.rating;
+    return ok(place);
+  }
+
+  async autocompletePlaces({ input, sessionToken, near }: { input: string; sessionToken: string; near: Coordinates | null }) {
+    await wait();
+    log("autocompletePlaces", { input, sessionToken, near });
+    return stubAutocomplete(input);
   }
 
   /** no Google here: canned places (Nobu, Zeitz, Woodlands), or a made-up one for any other link */
