@@ -1,4 +1,5 @@
 import "server-only";
+import { regionFor } from "@/lib/geocode/nominatim";
 import type { PostgrestError } from "@supabase/supabase-js";
 import type { ServerBackendService } from "@/lib/backend/interfaces/server";
 import type {
@@ -111,6 +112,8 @@ interface EventRow {
   start_time: string | null;
   location: string | null;
   event_attendees: { profile_id: string }[];
+  // many-to-one, so PostgREST embeds one row; a list is handled too, in case
+  places: { id: string; name: string } | { id: string; name: string }[] | null;
 }
 interface PlaceRow {
   id: string;
@@ -118,6 +121,7 @@ interface PlaceRow {
   category: string;
   area: string;
   maps_url: string | null;
+  note: string;
   status: PlaceStatus;
   hue: Hue;
   street: string;
@@ -155,8 +159,9 @@ interface GoalRow {
 const TOGETHER_SELECT =
   "id, name, invite_code, invite_expires_at, together_members (profile_id, tone, role, joined_at, left_at, profiles (name))";
 const CHORE_SELECT = "id, title, due, repeat, done_at, chore_assignees (profile_id)";
+const EVENT_SELECT = "id, title, day, start_time, location, event_attendees (profile_id), places (id, name)";
 const PLACE_SELECT =
-  "id, name, category, area, street, city, province, country, maps_url, status, hue, google_place_id, lat, lng, location_fetched_at, place_ratings (profile_id, rating), visits (id, day, title, note, rating)";
+  "id, name, category, area, street, city, province, country, maps_url, note, status, hue, google_place_id, lat, lng, location_fetched_at, place_ratings (profile_id, rating), visits (id, day, title, note, rating)";
 
 // ---- Mapping rows to models ---------------------------------------------------
 
@@ -220,6 +225,7 @@ const toEvent = (row: EventRow): CalendarEvent => ({
   time: row.start_time?.slice(0, 5) ?? null,
   location: row.location,
   attendees: row.event_attendees.map((a) => a.profile_id),
+  place: (Array.isArray(row.places) ? row.places[0] : row.places) ?? null,
 });
 
 const toPlace = (row: PlaceRow): Place => ({
@@ -228,6 +234,7 @@ const toPlace = (row: PlaceRow): Place => ({
   category: row.category,
   area: row.area,
   mapsUrl: row.maps_url,
+  note: row.note,
   status: row.status,
   ratings: Object.fromEntries(row.place_ratings.map((r) => [r.profile_id, r.rating])),
   visits: [...row.visits].sort((a, b) => b.day.localeCompare(a.day)),
@@ -569,7 +576,7 @@ export class RealServerService implements ServerBackendService {
     const sb = await createClient();
     const { data, error } = await sb
       .from("events")
-      .select("id, title, day, start_time, location, event_attendees (profile_id)")
+      .select(EVENT_SELECT)
       .gte("day", from)
       .lte("day", to)
       .order("day")
@@ -579,11 +586,11 @@ export class RealServerService implements ServerBackendService {
     return ok(data.map(toEvent));
   }
 
-  async addEvent({ title, day, time, location, attendees }: NewEvent): Promise<DataResult<CalendarEvent>> {
+  async addEvent({ title, day, time, location, attendees, placeId }: NewEvent): Promise<DataResult<CalendarEvent>> {
     const sb = await createClient();
     const { data, error } = await sb
       .from("events")
-      .insert({ title, day, start_time: time, location })
+      .insert({ title, day, start_time: time, location, place_id: placeId ?? null })
       .select("id")
       .single()
       .overrideTypes<{ id: string }, { merge: false }>();
@@ -600,7 +607,7 @@ export class RealServerService implements ServerBackendService {
     }
     const { data: row, error: readError } = await sb
       .from("events")
-      .select("id, title, day, start_time, location, event_attendees (profile_id)")
+      .select(EVENT_SELECT)
       .eq("id", data.id)
       .single()
       .overrideTypes<EventRow, { merge: false }>();
@@ -608,9 +615,15 @@ export class RealServerService implements ServerBackendService {
     return ok(toEvent(row));
   }
 
-  async updateEvent({ id, title, day, time, location, attendees }: { id: string } & NewEvent): Promise<DataResult<CalendarEvent>> {
+  async updateEvent({ id, title, day, time, location, attendees, placeId }: { id: string } & NewEvent): Promise<DataResult<CalendarEvent>> {
     const sb = await createClient();
-    const { data, error } = await sb.from("events").update({ title, day, start_time: time, location }).eq("id", id).select("id");
+    // left out, the plan keeps its place
+    const place = placeId === undefined ? {} : { place_id: placeId };
+    const { data, error } = await sb
+      .from("events")
+      .update({ title, day, start_time: time, location, ...place })
+      .eq("id", id)
+      .select("id");
     if (error) return fail(message(error, "We couldn't save that plan. Try again."));
     if (!data.length) return fail("That plan was removed.");
 
@@ -629,7 +642,7 @@ export class RealServerService implements ServerBackendService {
 
     const { data: row, error: readError } = await sb
       .from("events")
-      .select("id, title, day, start_time, location, event_attendees (profile_id)")
+      .select(EVENT_SELECT)
       .eq("id", id)
       .single()
       .overrideTypes<EventRow, { merge: false }>();
@@ -708,6 +721,35 @@ export class RealServerService implements ServerBackendService {
     return ok(toPlace(data));
   }
 
+  async getPlacePlans({ placeId, from }: { placeId: string; from: DayKey }): Promise<DataResult<CalendarEvent[]>> {
+    const sb = await createClient();
+    const { data, error } = await sb
+      .from("events")
+      .select(EVENT_SELECT)
+      .eq("place_id", placeId)
+      .gte("day", from)
+      .order("day")
+      .order("start_time", { nullsFirst: true })
+      .overrideTypes<EventRow[], { merge: false }>();
+    // 22P02: the id isn't a uuid, so it has no plans
+    if (error?.code === "22P02") return ok([]);
+    if (error) return fail(message(error, "We couldn't load the plans for this place."));
+    return ok(data.map(toEvent));
+  }
+
+  async setPlaceNote({ id, note }: { id: string; note: string }): Promise<DataResult<Place>> {
+    const sb = await createClient();
+    const { data, error } = await sb
+      .from("places")
+      .update({ note })
+      .eq("id", id)
+      .select(PLACE_SELECT)
+      .maybeSingle()
+      .overrideTypes<PlaceRow | null, { merge: false }>();
+    if (error) return fail(message(error, "We couldn't save that note. Try again."));
+    return data ? ok(toPlace(data)) : fail("We couldn't find that place.");
+  }
+
   async setPlaceLocation({ id, location }: { id: string; location: Coordinates }): Promise<MutationResult> {
     const sb = await createClient();
     const { error } = await sb
@@ -777,6 +819,10 @@ export class RealServerService implements ServerBackendService {
 
   async autocompletePlaces(params: { input: string; sessionToken: string; near: Coordinates | null }): Promise<PlaceSuggestion[]> {
     return autocomplete(params.input, params.sessionToken, params.near);
+  }
+
+  async findRegion({ queries }: { queries: string[] }) {
+    return regionFor(queries);
   }
 
   async findPlaceFromLink(query: PlaceQuery): Promise<string | null> {

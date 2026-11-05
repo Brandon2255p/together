@@ -122,10 +122,13 @@ export function useAddPlaceViewModel(data: AddPlaceViewData) {
     if (request !== latest.current) return;
     setResolvingLink(false);
     if (!result.data) return setError(result.error ?? "We couldn't read that link.");
-    const { placeId, name } = result.data;
+    const { placeId, name, address, mapsUrl } = result.data;
     if (placeId) return open(placeId, null);
     if (replacing) return setError("Google Maps doesn't know that place. Try searching for it by name.");
-    router.push(`/places/new/manual${name ? `?name=${encodeURIComponent(name)}` : ""}` as Route);
+    // Google Places doesn't know it: add it by hand, with what the link said
+    const prefill = Object.entries({ name, ...address, maps: mapsUrl ?? "" }).filter(([, value]) => value);
+    const search = new URLSearchParams(prefill).toString();
+    router.push(`/places/new/manual${search ? `?${search}` : ""}` as Route);
   }
 
   function onQueryChange(text: string) {

@@ -15,7 +15,7 @@ describe("monthGrid", () => {
 
   it("adds a dot per member with an event and one for open chores", () => {
     const events: CalendarEvent[] = [
-      { id: "1", title: "Dinner", day: "2026-11-03", time: "19:30", location: null, attendees: ["b", "a"] },
+      { id: "1", title: "Dinner", day: "2026-11-03", time: "19:30", location: null, attendees: ["b", "a"], place: null },
     ];
     const chores: Chore[] = [
       { id: "c", title: "Bins", due: "2026-11-03", repeat: "once", assignees: ["b"], done: false },
@@ -36,8 +36,8 @@ describe("gridRange", () => {
 describe("agendaFor", () => {
   it("lists events by time, then chores", () => {
     const events: CalendarEvent[] = [
-      { id: "late", title: "Late", day: "2026-11-03", time: "20:00", location: null, attendees: [] },
-      { id: "early", title: "Early", day: "2026-11-03", time: "08:00", location: null, attendees: [] },
+      { id: "late", title: "Late", day: "2026-11-03", time: "20:00", location: null, attendees: [], place: null },
+      { id: "early", title: "Early", day: "2026-11-03", time: "08:00", location: null, attendees: [], place: null },
     ];
     const chores: Chore[] = [{ id: "c", title: "Bins", due: "2026-11-03", repeat: "once", assignees: [], done: false }];
     expect(agendaFor("2026-11-03", events, chores).map((e) => e.key)).toEqual(["early", "late", "c"]);

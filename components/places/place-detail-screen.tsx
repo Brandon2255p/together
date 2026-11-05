@@ -3,9 +3,19 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { motion, useScroll, useTransform } from "motion/react";
-import { ChevronLeftIcon, ChevronRightIcon, EllipsisIcon, MapPinIcon, NavigationIcon, StarIcon } from "lucide-react";
+import {
+  CalendarPlusIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EllipsisIcon,
+  MapPinIcon,
+  NavigationIcon,
+  PencilIcon,
+  StarIcon,
+  StickyNoteIcon,
+} from "lucide-react";
 import type { Hue, Member } from "@/lib/models";
-import { Avatar } from "@/components/ui/avatar";
+import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { iconButtonVariants } from "@/components/ui/icon-button";
@@ -42,6 +52,22 @@ export interface PlaceAddressCard {
   fromGoogle: boolean;
 }
 
+/** a plan on the calendar to go to this place */
+export interface PlacePlanRow {
+  id: string;
+  /** "14" and "Nov" */
+  day: string;
+  month: string;
+  title: string;
+  /** "Sat · 19:30", or "Sat · All day" */
+  when: string;
+  people: Member[];
+  /** the plan's day on the calendar */
+  href: Route;
+  /** still saving: not tappable yet */
+  pending: boolean;
+}
+
 export interface PlaceDetailScreenProps {
   name: string;
   hue: Hue;
@@ -53,6 +79,12 @@ export interface PlaceDetailScreenProps {
   ratings: { member: Member; value: number | null }[];
   address: PlaceAddressCard;
   visits: { id: string; day: string; month: string; title: string; note: string | null; rating: number | null }[];
+  /** why you want to go, or anything else; null when there's none */
+  note: string | null;
+  onEditNote: () => void;
+  /** plans from today on, soonest first */
+  plans: PlacePlanRow[];
+  onPlanVisit: () => void;
   backHref: Route;
   /** Edit place (22) */
   editHref: Route;
@@ -60,7 +92,7 @@ export interface PlaceDetailScreenProps {
 }
 
 export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
-  const { name, hue, photo, googleRating, tags, ratings, address, visits, backHref, editHref, onLogVisit } = props;
+  const { name, hue, photo, googleRating, tags, ratings, address, visits, note, plans, backHref, editHref } = props;
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 300], [0, 90]);
   const pinScale = useTransform(scrollY, [0, 200], [1, 0.8]);
@@ -110,6 +142,10 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
           </div>
         </RevealItem>
 
+        <RevealItem>
+          <NoteCard note={note} onEdit={props.onEditNote} />
+        </RevealItem>
+
         <RevealItem className="flex gap-2.5">
           {ratings.map(({ member, value }) => (
             <div key={member.id} className="flex flex-1 items-center gap-2.5 rounded-row bg-surface p-3">
@@ -151,6 +187,60 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
           {address.fromGoogle ? <p className="px-1 text-right text-caption text-ink-subtle">Google Maps</p> : null}
         </RevealItem>
 
+        <RevealItem className="flex flex-col gap-3">
+          <SectionHeader
+            title={plans.length ? `Plans · ${plans.length}` : "Plans"}
+            action={
+              plans.length ? (
+                <button type="button" onClick={props.onPlanVisit}>
+                  Plan another
+                </button>
+              ) : null
+            }
+          />
+          {plans.length === 0 ? (
+            <button
+              type="button"
+              onClick={props.onPlanVisit}
+              className="flex items-center gap-3 rounded-row border border-dashed border-line bg-surface px-4 py-3.5 text-left"
+            >
+              <CalendarPlusIcon className="size-[18px] shrink-0 text-partner" aria-hidden />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-body-strong">Plan to go</span>
+                <span className="text-caption text-ink-muted">Pick a day and time. It goes on your calendar.</span>
+              </span>
+              <ChevronRightIcon className="size-[18px] shrink-0 text-ink-subtle" aria-hidden />
+            </button>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {plans.map((plan) => (
+                <li key={plan.id}>
+                  <Link
+                    href={plan.href}
+                    aria-disabled={plan.pending}
+                    aria-label={`${plan.title}, ${plan.when}. Open in the calendar`}
+                    className={cn(
+                      "flex items-center gap-3.5 rounded-row bg-partner-soft px-4 py-3.5 transition-opacity",
+                      plan.pending && "pointer-events-none opacity-60"
+                    )}
+                  >
+                    <span className="flex w-10 shrink-0 flex-col items-center text-partner-ink">
+                      <span className="text-title">{plan.day}</span>
+                      <span className="text-caption">{plan.month}</span>
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-body-strong">{plan.title}</span>
+                      <span className="text-caption text-ink-muted">{plan.when}</span>
+                    </span>
+                    {plan.people.length ? <AvatarStack members={plan.people} /> : null}
+                    <ChevronRightIcon className="size-[18px] shrink-0 text-ink-subtle" aria-hidden />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </RevealItem>
+
         <RevealItem className="flex flex-col gap-3 pb-4">
           <SectionHeader title={`Visits · ${visits.length}`} />
           {visits.length === 0 ? (
@@ -176,12 +266,40 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
               ))}
             </ul>
           )}
-          <Button block onClick={onLogVisit} className="mt-2">
+          <Button block onClick={props.onLogVisit} className="mt-2">
             Log a visit
           </Button>
         </RevealItem>
       </Reveal>
     </div>
+  );
+}
+
+/** the place's note, or a prompt to add one: why you want to go, or anything else */
+function NoteCard({ note, onEdit }: { note: string | null; onEdit: () => void }) {
+  if (!note) {
+    return (
+      <button
+        type="button"
+        onClick={onEdit}
+        className="flex w-full items-center gap-3 rounded-row border border-dashed border-line px-4 py-3 text-left text-callout text-ink-muted"
+      >
+        <StickyNoteIcon className="size-[18px] shrink-0 text-warning" aria-hidden />
+        <span className="flex-1">Add a note: why you want to go, or anything else</span>
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      aria-label={`Note: ${note}. Edit note`}
+      className="flex w-full items-start gap-3 rounded-row bg-warning-soft px-4 py-3.5 text-left"
+    >
+      <StickyNoteIcon className="mt-0.5 size-[18px] shrink-0 text-warning-ink" aria-hidden />
+      <span className="flex-1 text-callout whitespace-pre-line text-ink">{note}</span>
+      <PencilIcon className="mt-0.5 size-4 shrink-0 text-warning-ink/70" aria-hidden />
+    </button>
   );
 }
 

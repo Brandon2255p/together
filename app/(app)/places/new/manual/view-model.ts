@@ -11,9 +11,11 @@ export interface ManualPlaceViewData {
   /** what was typed in the search, or the name a Maps link gave */
   name: string;
   status: PlaceStatus;
+  /** the address a Maps link spelled out */
+  address: AddressDraft;
+  /** the Maps link it came from, kept so the place opens on the right pin (checked again on the server) */
+  mapsUrl: string | null;
 }
-
-const EMPTY: AddressDraft = { street: "", area: "", city: "", province: "", country: "" };
 
 /** 21c: a place Google doesn't have, added by hand */
 export function useManualPlaceViewModel(data: ManualPlaceViewData) {
@@ -21,7 +23,7 @@ export function useManualPlaceViewModel(data: ManualPlaceViewData) {
   const [name, setName] = useState(data.name);
   const [kind, setKind] = useState("Other");
   const [status, setStatus] = useState<PlaceStatus>(data.status);
-  const [address, setAddress] = useState<AddressDraft>(EMPTY);
+  const [address, setAddress] = useState<AddressDraft>(data.address);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +31,7 @@ export function useManualPlaceViewModel(data: ManualPlaceViewData) {
     if (!name.trim()) return setError("Give the place a name.");
     setPending(true);
     setError(null);
-    const result = await addPlaceByHand({ name, kind, status, ...address });
+    const result = await addPlaceByHand({ name, kind, status, ...address, mapsUrl: data.mapsUrl });
     if (!result.data) {
       setPending(false);
       return setError(result.error ?? "We couldn't save that place. Try again.");

@@ -31,6 +31,8 @@ export interface AddEventSheetProps {
   error: string | null;
   /** "edit" changes an existing plan: Save instead of Add */
   mode?: "add" | "edit";
+  /** overrides "New plan" / "Edit plan" above the title */
+  eyebrow?: string;
 }
 
 const INPUT =
@@ -46,7 +48,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function AddEventSheet(props: AddEventSheetProps) {
-  const { open, onOpenChange, draft, onDraftChange, dayLabel, members, onSubmit, pending, error, mode = "add" } = props;
+  const { open, onOpenChange, draft, onDraftChange, dayLabel, members, onSubmit, pending, error, mode = "add", eyebrow } = props;
   const editing = mode === "edit";
   const toggle = (id: string) =>
     onDraftChange({
@@ -54,7 +56,7 @@ export function AddEventSheet(props: AddEventSheetProps) {
     });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} eyebrow={editing ? "Edit plan" : "New plan"} title={draft.title.trim() || "What's happening?"}>
+    <Sheet open={open} onOpenChange={onOpenChange} eyebrow={eyebrow ?? (editing ? "Edit plan" : "New plan")} title={draft.title.trim() || "What's happening?"}>
       <form
         className="flex flex-col gap-5"
         onSubmit={(e) => {
