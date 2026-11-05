@@ -11,10 +11,24 @@ export const UNNAMED_PLACE = "Pinned place";
 
 export type PlaceInput = { kind: "name"; name: string } | { kind: "link"; url: URL; label: string | null };
 
+export interface LinkAddress {
+  street: string;
+  area: string;
+  city: string;
+  province: string;
+  country: string;
+}
+
+export const NO_ADDRESS: LinkAddress = { street: "", area: "", city: "", province: "", country: "" };
+
 export interface PlaceDetails {
   name: string;
-  /** the street and suburb or city, when the link carries an address */
+  /** the street and suburb or city, when the link carries an address: what we search Google with */
   area: string | null;
+  /** the address the link spells out, split into our fields ("" when it doesn't say), for adding it by hand */
+  address: LinkAddress;
+  /** "7600", when the address has one: helps find the province and country when the link leaves them out */
+  postalCode: string | null;
   mapsUrl: string | null;
   /** where the pin is, when the link says: helps the Places API pick the right match */
   coordinates: Coordinates | null;
@@ -67,6 +81,8 @@ export function placeFromMapsUrl(resolved: URL, shared: URL, label: string | nul
   return {
     name: name.slice(0, 80),
     area: areaFrom(addressParts),
+    address: addressFrom(addressParts),
+    postalCode: addressParts.find((part) => POSTAL_CODE.test(part) && /\d{3}/.test(part))?.trim() ?? null,
     mapsUrl: shared.toString(),
     coordinates: coordinatesFrom(resolved),
   };
@@ -122,6 +138,8 @@ function sameName(a: string, b: string): boolean {
 }
 
 const POSTAL_CODE = /^[\d\s-]+$/;
+/** "IL 62701": a US state with its ZIP code */
+const STATE_AND_ZIP = /^([A-Z]{2})\s+\d{5}(?:-\d{4})?$/;
 const PLUS_CODE = /^\w{4}\+\w{2,}$/;
 
 /**
@@ -137,4 +155,51 @@ function areaFrom(parts: string[]): string | null {
   );
   const area = words.slice(-2).join(", ");
   return area ? area.slice(0, 60) : null;
+}
+
+/**
+ * The address a link spells out, as our fields. Google writes it street first and city last, then the postal code and
+ * the country: "R44 Adam Tas St, Klapmuts, 7600" or "36 Buitenkant St, Cape Town City Centre, Cape Town, 8000, South
+ * Africa". So: the part after a postal code is the country; postal and plus codes go; then the last part is the city,
+ * the one before it the suburb (when there are three or more), and the rest the street.
+ */
+export function addressFrom(parts: string[]): LinkAddress {
+  let province = "";
+  let postalAt = -1;
+  parts.forEach((part, i) => {
+    const state = STATE_AND_ZIP.exec(part);
+    if (state) province = state[1] ?? "";
+    if (state || POSTAL_CODE.test(part)) postalAt = i;
+  });
+  const last = parts.length - 1;
+  const country = postalAt >= 0 && postalAt === last - 1 ? (parts[last] ?? "") : "";
+  const words = parts
+    .slice(0, country ? last : parts.length)
+    .filter((part) => !POSTAL_CODE.test(part) && !PLUS_CODE.test(part) && !STATE_AND_ZIP.test(part));
+  const n = words.length;
+  const city = n >= 1 ? (words[n - 1] ?? "") : "";
+  const area = n >= 3 ? (words[n - 2] ?? "") : "";
+  const street = n >= 2 ? words.slice(0, n >= 3 ? n - 2 : 1).join(", ") : "";
+  return {
+    street: street.slice(0, 80),
+    area: area.slice(0, 60),
+    city: city.slice(0, 80),
+    province: province.slice(0, 80),
+    country: country.slice(0, 80),
+  };
+}
+
+/**
+ * What to look up for a link's province and country, most specific first: the whole address, then the city with its
+ * postal code, then the city alone (at most three, as each is a request). Empty when the link gave no city.
+ */
+export function regionQueries(address: LinkAddress, postalCode: string | null): string[] {
+  if (!address.city) return [];
+  const join = (parts: string[]) => parts.filter(Boolean).join(", ");
+  const queries = [
+    join([address.street, address.area, address.city, postalCode ?? ""]),
+    join([address.city, postalCode ?? ""]),
+    address.city,
+  ];
+  return [...new Set(queries)];
 }

@@ -33,8 +33,8 @@ export interface StubState {
   nextId: number;
 }
 
-type SeedPlace = Omit<Place, "street" | "city" | "province" | "country" | "googlePlaceId" | "location"> &
-  Partial<Pick<Place, "street" | "city" | "province" | "country" | "googlePlaceId">> & { at?: [number, number] };
+type SeedPlace = Omit<Place, "street" | "city" | "province" | "country" | "googlePlaceId" | "location" | "note"> &
+  Partial<Pick<Place, "street" | "city" | "province" | "country" | "googlePlaceId" | "note">> & { at?: [number, number] };
 
 /** seed places are in Cape Town unless they say otherwise; Nobu is linked to the stub's canned Google place */
 const inCapeTown = (places: SeedPlace[]): Place[] =>
@@ -44,6 +44,7 @@ const inCapeTown = (places: SeedPlace[]): Place[] =>
     province: "Western Cape",
     country: "South Africa",
     googlePlaceId: null,
+    note: "",
     ...p,
     location: at ? { lat: at[0], lng: at[1], fetchedAt: new Date().toISOString() } : null,
   }));
@@ -98,13 +99,13 @@ export function seed(today = todayKey()): StubState {
       { id: "c-6", title: "Take out the bins", due: null, repeat: "once", assignees: [BRANDON.id, ADELE.id], done: true },
     ],
     events: [
-      { id: "e-1", title: "Dinner at Nobu", day: d(0), time: "19:30", location: "Sea Point", attendees: [BRANDON.id, ADELE.id] },
-      { id: "e-2", title: "Pilates", day: d(2), time: "07:00", location: "Gardens", attendees: [ADELE.id] },
-      { id: "e-3", title: "Padel with Sam", day: d(5), time: "18:00", location: null, attendees: [BRANDON.id] },
-      { id: "e-4", title: "Mom's birthday lunch", day: d(9), time: "12:30", location: "Constantia", attendees: [BRANDON.id, ADELE.id] },
-      { id: "e-5", title: "Book club", day: d(11), time: "19:00", location: null, attendees: [ADELE.id] },
-      { id: "e-6", title: "Weekend away", day: d(18), time: null, location: "Paternoster", attendees: [BRANDON.id, ADELE.id] },
-      { id: "e-7", title: "Dentist", day: d(24), time: "09:15", location: null, attendees: [BRANDON.id] },
+      { id: "e-1", title: "Dinner at Nobu", day: d(0), time: "19:30", location: "Sea Point", attendees: [BRANDON.id, ADELE.id], place: { id: "p-1", name: "Nobu" } },
+      { id: "e-2", title: "Pilates", day: d(2), time: "07:00", location: "Gardens", attendees: [ADELE.id], place: null },
+      { id: "e-3", title: "Padel with Sam", day: d(5), time: "18:00", location: null, attendees: [BRANDON.id], place: null },
+      { id: "e-4", title: "Mom's birthday lunch", day: d(9), time: "12:30", location: "Constantia", attendees: [BRANDON.id, ADELE.id], place: null },
+      { id: "e-5", title: "Book club", day: d(11), time: "19:00", location: null, attendees: [ADELE.id], place: null },
+      { id: "e-6", title: "Weekend away", day: d(18), time: null, location: "Paternoster", attendees: [BRANDON.id, ADELE.id], place: { id: "p-6", name: "Paternoster beach walk" } },
+      { id: "e-7", title: "Dentist", day: d(24), time: "09:15", location: null, attendees: [BRANDON.id], place: null },
     ],
     places: inCapeTown([
       {
@@ -133,8 +134,10 @@ export function seed(today = todayKey()): StubState {
         ratings: { [BRANDON.id]: 4, [ADELE.id]: 4.5 },
         visits: [{ id: "v-6", day: d(-12), title: "Brunch", note: null, rating: 4.2 }],
       },
-      { id: "p-5", name: "Kloof Street House", category: "Restaurant", area: "Gardens", status: "want", hue: "accent", mapsUrl: null, ratings: {}, visits: [] },
-      { id: "p-6", name: "Paternoster beach walk", category: "Day trip", area: "West Coast", city: "Paternoster", status: "want", hue: "partner", mapsUrl: null, ratings: {}, visits: [] },
+      { id: "p-5", name: "Kloof Street House", category: "Restaurant", area: "Gardens", status: "want", hue: "accent", mapsUrl: null, ratings: {}, visits: [],
+        note: "Sam says the burnt butter gnocchi is the best in town. Book the upstairs room." },
+      { id: "p-6", name: "Paternoster beach walk", category: "Day trip", area: "West Coast", city: "Paternoster", status: "want", hue: "partner", mapsUrl: null, ratings: {}, visits: [],
+        note: "Low tide is best. Lunch at Wolfgat after?" },
       { id: "p-7", name: "Zeitz MOCAA", category: "Museum", area: "Waterfront", status: "want", hue: "success", mapsUrl: null, ratings: {}, visits: [] },
       { id: "p-8", name: "Jason Bakery", category: "Bakery", area: "Bree Street", status: "want", hue: "warning", mapsUrl: null, ratings: {}, visits: [] },
       {
@@ -225,7 +228,7 @@ function seedFamily(today: string): StubState {
     chores: [
       { id: "c-f1", title: "Book the Christmas venue", due: d(6), repeat: "once", assignees: [linda.id, brandon.id], done: false },
     ],
-    events: [{ id: "e-f1", title: "Sunday lunch", day: d(3), time: "12:30", location: "Constantia", attendees: [linda.id, brandon.id, sam.id] }],
+    events: [{ id: "e-f1", title: "Sunday lunch", day: d(3), time: "12:30", location: "Constantia", attendees: [linda.id, brandon.id, sam.id], place: null }],
     wishes: [{ id: "w-f1", ownerId: sam.id, name: "Cricket bat", price: 1400, url: null, claimedBy: null, hue: "success" }],
   };
 }

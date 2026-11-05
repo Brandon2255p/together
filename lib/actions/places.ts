@@ -1,7 +1,9 @@
 "use server";
 
 import { serverBackend } from "@/lib/backend/server";
+import { todayKey } from "@/lib/format";
 import type {
+  CalendarEvent,
   Coordinates,
   DataResult,
   GooglePlaceDetails,
@@ -12,7 +14,16 @@ import type {
   PlaceSuggestion,
 } from "@/lib/models";
 import { kindFromGoogleType } from "@/lib/places/google-types";
-import { isMapsUrl, isShortMapsLink, placeFromMapsUrl, readPlaceInput, UNNAMED_PLACE } from "@/lib/places/maps-link";
+import {
+  isMapsUrl,
+  isShortMapsLink,
+  NO_ADDRESS,
+  placeFromMapsUrl,
+  readPlaceInput,
+  regionQueries,
+  UNNAMED_PLACE,
+  type LinkAddress,
+} from "@/lib/places/maps-link";
 
 export async function getPlaces() {
   return serverBackend.getPlaces();
@@ -64,17 +75,29 @@ export async function previewGooglePlace(placeId: string, sessionToken: string |
 
 /**
  * A pasted Google Maps link (or the text the Maps app shares): followed and read for a name and pin, then matched on
- * Google (Text Search, ids only). `placeId` when Google has it, else the name the link gave, to add by hand.
+ * Google (Text Search, ids only). `placeId` when Google has it, else the name, address and link the link gave, to add
+ * by hand.
  */
-export async function findPlaceFromMapsLink(input: string): Promise<DataResult<{ placeId: string | null; name: string }>> {
+export async function findPlaceFromMapsLink(
+  input: string,
+): Promise<DataResult<{ placeId: string | null; name: string; address: LinkAddress; mapsUrl: string | null }>> {
   const parsed = readPlaceInput(input);
   if (!parsed || parsed.kind !== "link") return { data: null, error: "That isn't a Google Maps link." };
   const resolved = isShortMapsLink(parsed.url) ? ((await followMapsLink(parsed.url)) ?? parsed.url) : parsed.url;
-  const { coordinates, name, area } = placeFromMapsUrl(resolved, parsed.url, parsed.label);
+  const { coordinates, name, area, address, postalCode, mapsUrl } = placeFromMapsUrl(resolved, parsed.url, parsed.label);
   // a dropped pin has no name to search for
-  if (name === UNNAMED_PLACE) return { data: { placeId: null, name: "" } };
+  if (name === UNNAMED_PLACE) return { data: { placeId: null, name: "", address: NO_ADDRESS, mapsUrl } };
   const placeId = await serverBackend.findPlaceFromLink({ text: area ? `${name}, ${area}` : name, near: coordinates });
-  return { data: { placeId, name } };
+  if (placeId) return { data: { placeId, name, address, mapsUrl } };
+  // added by hand: links often leave out the province and country ("R44 Adam Tas St, Klapmuts, 7600"), so look them up
+  if (address.province && address.country) return { data: { placeId, name, address, mapsUrl } };
+  const region = await serverBackend.findRegion({ queries: regionQueries(address, postalCode) });
+  const filled = {
+    ...address,
+    province: address.province || clean(region?.province ?? "", 80),
+    country: address.country || clean(region?.country ?? "", 80),
+  };
+  return { data: { placeId, name, address: filled, mapsUrl } };
 }
 
 /** Saves a Google place picked in 21b, with our own kind and our area labels from Google's address */
@@ -109,6 +132,19 @@ export interface PlaceByHand {
   province: string;
   country: string;
   status: PlaceStatus;
+  /** the Google Maps link it was added from, when Google Places didn't know it */
+  mapsUrl?: string | null;
+}
+
+/** only https Google Maps links are kept to open the place */
+function mapsLink(text: string | null | undefined): string | null {
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" && isMapsUrl(url) && text.length <= 500 ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** 21c: a place Google doesn't have */
@@ -123,7 +159,7 @@ export async function addPlaceByHand(form: PlaceByHand): Promise<DataResult<Plac
     city: clean(form.city, 80),
     province: clean(form.province, 80),
     country: clean(form.country, 80),
-    mapsUrl: null,
+    mapsUrl: mapsLink(form.mapsUrl),
     status: form.status,
     googlePlaceId: null,
     location: null,
@@ -170,6 +206,20 @@ export async function changeGooglePlace(id: string, placeId: string, sessionToke
     country: clean(country, 80),
     google: { placeId: google.placeId, location: google.location },
   });
+}
+
+/** why you want to go, or anything else; "" clears it. Line breaks are kept. */
+export async function setPlaceNote(id: string, note: string): Promise<DataResult<Place>> {
+  const text = note.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  if (text.length > NOTE_MAX) return { data: null, error: `Notes are at most ${NOTE_MAX} characters.` };
+  return serverBackend.setPlaceNote({ id, note: text });
+}
+
+const NOTE_MAX = 500;
+
+/** the place's plans on the calendar from today on, soonest first */
+export async function getPlacePlans(placeId: string): Promise<DataResult<CalendarEvent[]>> {
+  return serverBackend.getPlacePlans({ placeId, from: todayKey() });
 }
 
 export async function unlinkPlace(id: string): Promise<MutationResult> {

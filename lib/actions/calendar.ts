@@ -24,6 +24,8 @@ function clean(event: NewEvent): { event: NewEvent; error: null } | { event: nul
       time: event.time,
       location: location?.slice(0, 120) ?? null,
       attendees: [...new Set(event.attendees)],
+      // left out on an edit, the plan keeps its place
+      ...(event.placeId !== undefined ? { placeId: event.placeId || null } : {}),
     },
     error: null,
   };

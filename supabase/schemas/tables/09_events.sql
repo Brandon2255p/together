@@ -8,12 +8,15 @@ create table public.events (
   -- null for all day
   start_time time,
   location text check (char_length(location) <= 120),
+  -- a plan to go to one of the Together's places; its foreign key is in 11_places.sql, after the table it points at
+  place_id uuid,
   created_by uuid default auth.uid() references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   unique (id, together_id)
 );
 
 create index events_together_day_idx on public.events (together_id, day);
+create index events_place_idx on public.events (place_id, day) where place_id is not null;
 
 alter table public.events enable row level security;
 
