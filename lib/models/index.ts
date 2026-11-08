@@ -115,9 +115,12 @@ export interface CalendarEvent {
   time: string | null;
   location: string | null;
   attendees: MemberId[];
+  /** set when it's a plan to go to one of the Together's places */
+  place: { id: string; name: string } | null;
 }
 
-export type NewEvent = Omit<CalendarEvent, "id">;
+/** `placeId` links the plan to a place; left out, an edit keeps whatever place the plan had */
+export type NewEvent = Omit<CalendarEvent, "id" | "place"> & { placeId?: string | null };
 
 // ---- Places ---------------------------------------------------------------
 
@@ -152,6 +155,8 @@ export interface Place {
   province: string;
   country: string;
   mapsUrl: string | null;
+  /** why you want to go, or anything else worth remembering; "" when there's none */
+  note: string;
   status: PlaceStatus;
   /** each member rates on their own, 1–5 */
   ratings: Partial<Record<MemberId, number>>;

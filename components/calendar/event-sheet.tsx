@@ -1,6 +1,8 @@
 "use client";
 
-import { ClockIcon, MapPinIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import Link from "next/link";
+import type { Route } from "next";
+import { ChevronRightIcon, ClockIcon, MapPinIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import type { Member } from "@/lib/models";
 import { AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,8 @@ export interface EventSheetData {
   when: string;
   where: string | null;
   people: Member[];
+  /** a plan to go to one of your places: opens it */
+  place: { name: string; href: Route } | null;
 }
 
 export function EventSheet({
@@ -54,6 +58,16 @@ export function EventSheet({
               </span>
             ) : null}
           </div>
+          {event.place ? (
+            <Link href={event.place.href} className="flex items-center gap-3 rounded-row bg-surface px-4 py-3.5">
+              <MapPinIcon className="size-[18px] shrink-0 text-partner" aria-hidden />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-caption text-ink-muted">A plan to go to</span>
+                <span className="truncate text-body-strong">{event.place.name}</span>
+              </span>
+              <ChevronRightIcon className="size-[18px] shrink-0 text-ink-subtle" aria-hidden />
+            </Link>
+          ) : null}
           <InlineError>{error}</InlineError>
           <Button block onClick={() => onEdit(event.id)}>
             <PencilIcon className="size-4" aria-hidden />

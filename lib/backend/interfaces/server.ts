@@ -92,6 +92,8 @@ export interface ServerBackendService {
   /** changes what, when, where and who's going */
   updateEvent(params: { id: string } & NewEvent): Promise<DataResult<CalendarEvent>>;
   deleteEvent(params: { id: string }): Promise<MutationResult>;
+  /** a place's plans on the calendar from `from` on, soonest first */
+  getPlacePlans(params: { placeId: string; from: DayKey }): Promise<DataResult<CalendarEvent[]>>;
 
   // Places
   getPlaces(): Promise<DataResult<Place[]>>;
@@ -100,6 +102,8 @@ export interface ServerBackendService {
   addPlace(params: NewPlace): Promise<DataResult<Place>>;
   /** refreshes a Google place's coordinates (Google lets us keep them 30 days) */
   setPlaceLocation(params: { id: string; location: Coordinates }): Promise<MutationResult>;
+  /** saves a place's note ("" clears it) */
+  setPlaceNote(params: { id: string; note: string }): Promise<DataResult<Place>>;
   /** saves the Edit place screen; with `google` it becomes that Google place (one already saved here is refused) */
   updatePlace(params: { id: string } & PlaceChanges): Promise<DataResult<Place>>;
   /** forgets the Google place (and its coordinates): it becomes a place added by hand */
@@ -114,6 +118,8 @@ export interface ServerBackendService {
   autocompletePlaces(params: { input: string; sessionToken: string; near: Coordinates | null }): Promise<PlaceSuggestion[]>;
   /** the Google place a pasted Maps link points at, from its name and pin */
   findPlaceFromLink(params: PlaceQuery): Promise<string | null>;
+  /** the province and country for an address a link gave without them; tries `queries` most specific first */
+  findRegion(params: { queries: string[] }): Promise<{ province: string; country: string } | null>;
   /** fresh details to save or show (never stored); `extras` adds the rating, hours and photo */
   getGooglePlace(params: { placeId: string; extras: boolean; sessionToken?: string }): Promise<GooglePlaceDetails | null>;
 

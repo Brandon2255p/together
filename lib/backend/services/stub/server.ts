@@ -91,6 +91,19 @@ function toChallenge(c: StubChallenge, today = todayKey()): Challenge {
   };
 }
 
+/** the place a plan links to: null for none, undefined when there's no such place */
+function placeLink(placeId: string | null | undefined): CalendarEvent["place"] | undefined {
+  if (!placeId) return null;
+  const place = state().places.find((p) => p.id === placeId);
+  return place ? { id: place.id, name: place.name } : undefined;
+}
+
+/** a plan with its place's current name (it may have been renamed) */
+function withPlace(event: CalendarEvent): CalendarEvent {
+  const place = event.place ? state().places.find((p) => p.id === event.place?.id) : undefined;
+  return { ...event, place: place ? { id: place.id, name: place.name } : null };
+}
+
 export class StubServerService implements ServerBackendService {
   async getTogether() {
     await wait();
@@ -377,24 +390,40 @@ export class StubServerService implements ServerBackendService {
   async getEvents({ from, to }: { from: string; to: string }) {
     await wait();
     log("getEvents", { from, to });
-    return ok(state().events.filter((e) => e.day >= from && e.day <= to));
+    return ok(state().events.filter((e) => e.day >= from && e.day <= to).map(withPlace));
   }
 
-  async addEvent(event: NewEvent) {
+  async addEvent({ placeId, ...event }: NewEvent) {
     await wait();
-    log("addEvent", event);
-    const added: CalendarEvent = { ...event, id: id("e") };
+    log("addEvent", { ...event, placeId });
+    const place = placeLink(placeId);
+    if (place === undefined) return fail<CalendarEvent>("We couldn't find that place.");
+    const added: CalendarEvent = { ...event, id: id("e"), place };
     state().events.push(added);
     return ok(added);
   }
 
-  async updateEvent({ id: eventId, ...changes }: { id: string } & NewEvent) {
+  async updateEvent({ id: eventId, placeId, ...changes }: { id: string } & NewEvent) {
     await wait();
-    log("updateEvent", { id: eventId, ...changes });
+    log("updateEvent", { id: eventId, placeId, ...changes });
     const event = state().events.find((e) => e.id === eventId);
     if (!event) return fail<CalendarEvent>("That plan was removed.");
+    if (placeId !== undefined) {
+      const place = placeLink(placeId);
+      if (place === undefined) return fail<CalendarEvent>("We couldn't find that place.");
+      event.place = place;
+    }
     Object.assign(event, changes);
-    return ok(event);
+    return ok(withPlace(event));
+  }
+
+  async getPlacePlans({ placeId, from }: { placeId: string; from: string }) {
+    await wait();
+    log("getPlacePlans", { placeId, from });
+    const plans = state()
+      .events.filter((e) => e.place?.id === placeId && e.day >= from)
+      .sort((a, b) => a.day.localeCompare(b.day) || (a.time ?? "").localeCompare(b.time ?? ""));
+    return ok(plans.map(withPlace));
   }
 
   async deleteEvent({ id: eventId }: { id: string }) {
@@ -435,6 +464,7 @@ export class StubServerService implements ServerBackendService {
       province: place.province,
       country: place.country,
       mapsUrl: place.mapsUrl,
+      note: "",
       status: place.status,
       ratings: {},
       visits: [],
@@ -444,6 +474,15 @@ export class StubServerService implements ServerBackendService {
     };
     s.places.unshift(added);
     return ok(added);
+  }
+
+  async setPlaceNote({ id: placeId, note }: { id: string; note: string }) {
+    await wait();
+    log("setPlaceNote", { id: placeId, note });
+    const place = state().places.find((p) => p.id === placeId);
+    if (!place) return fail<Place>("We couldn't find that place.");
+    place.note = note;
+    return ok(place);
   }
 
   async setPlaceLocation({ id: placeId, location }: { id: string; location: Coordinates }) {
@@ -487,6 +526,8 @@ export class StubServerService implements ServerBackendService {
     log("deletePlace", { id: placeId });
     const s = state();
     s.places = s.places.filter((p) => p.id !== placeId);
+    // its plans stay on the calendar, no longer linked (on delete set null)
+    for (const e of s.events) if (e.place?.id === placeId) e.place = null;
     return done;
   }
 
@@ -510,11 +551,18 @@ export class StubServerService implements ServerBackendService {
     return stubAutocomplete(input);
   }
 
-  /** no Google here: canned places (Nobu, Zeitz, Woodlands), or a made-up one for any other link */
+  /** no Google here: canned places (Nobu, Zeitz, Woodlands); any other link isn't found and is added by hand */
   async findPlaceFromLink(query: PlaceQuery) {
     await wait();
     log("findPlaceFromLink", query);
     return stubFindPlace(query);
+  }
+
+  /** no geocoder here: every link is in the Western Cape */
+  async findRegion({ queries }: { queries: string[] }) {
+    await wait();
+    log("findRegion", { queries });
+    return queries.length ? { province: "Western Cape", country: "South Africa" } : null;
   }
 
   async getGooglePlace({ placeId, extras }: { placeId: string; extras: boolean; sessionToken?: string }) {

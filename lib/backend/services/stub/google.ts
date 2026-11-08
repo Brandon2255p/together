@@ -112,11 +112,13 @@ const PLACES: GooglePlaceDetails[] = [
 
 const words = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
-/** the canned place whose name shares a word with the query, else a made-up one so any link works */
-export function stubFindPlace(query: PlaceQuery): string {
+/**
+ * The canned place whose name shares a word with the query. Any other link isn't found, as with Google when there's
+ * no key or no match, so it goes to Add it by hand with the name and address the link spells out.
+ */
+export function stubFindPlace(query: PlaceQuery): string | null {
   const asked = new Set(words(query.text.split(",")[0] ?? query.text));
-  const match = PLACES.find((p) => words(p.name).some((w) => asked.has(w)));
-  return match?.placeId ?? `stub-${[...asked].join("-") || "place"}`;
+  return PLACES.find((p) => words(p.name).some((w) => asked.has(w)))?.placeId ?? null;
 }
 
 /** canned autocomplete: the places whose name contains what was typed, with the matched part marked */

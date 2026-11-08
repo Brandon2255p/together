@@ -73,8 +73,8 @@ Open <http://localhost:3000>. The app runs on the **stub backend** by default, s
 - Any email works. **Any 6-digit code signs you in**, except `000000`, which fails so you can see the error state.
 - You're signed in as **Brandon**, paired with **Adele**, with a few weeks of seed data relative to today.
 - State lives in memory for as long as the dev server runs. Every backend call logs `[stub] …` to the terminal.
-- Google Places is canned too: links to Nobu, Zeitz MOCAA or Woodlands Boulevard match those places, and any other
-  link gets a made-up match, so adding places works offline.
+- Google Places is canned too: links to Nobu, Zeitz MOCAA or Woodlands Boulevard match those places. Any other
+  link isn't found (as when Google has no match), so it opens Add it by hand with the name and address the link gives.
 
 ### Scripts
 

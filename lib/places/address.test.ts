@@ -22,6 +22,7 @@ function place(name: string, over: Partial<Place> = {}): Place {
     category: "Restaurant",
     area: "",
     street: "",
+    note: "",
     city: "Cape Town",
     province: "Western Cape",
     country: "South Africa",

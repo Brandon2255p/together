@@ -22,6 +22,8 @@ create table public.places (
   lat double precision check (lat between -90 and 90),
   lng double precision check (lng between -180 and 180),
   location_fetched_at timestamptz,
+  -- why you want to go, or anything else worth remembering about it
+  note text not null default '' check (char_length(note) <= 500),
   status public.place_status not null default 'want',
   hue public.hue not null default 'accent',
   created_by uuid default auth.uid() references public.profiles (id) on delete set null,
@@ -40,3 +42,9 @@ alter table public.places enable row level security;
 create policy "members" on public.places for all to authenticated
   using (together_id = (select public.my_together_id()))
   with check (together_id = (select public.my_together_id()));
+
+-- A calendar plan to go to a place (events.place_id) stays on the calendar when the place is deleted; it just stops
+-- pointing at it. The place must be in the plan's own Together.
+alter table public.events
+  add constraint events_place_fkey foreign key (place_id, together_id)
+  references public.places (id, together_id) on delete set null (place_id);

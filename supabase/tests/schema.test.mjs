@@ -151,7 +151,16 @@ const zeitz = (await one("brandon", "select id from public.places where google_p
 await as("brandon", "update public.places set google_place_id = null, lat = null, lng = null, location_fetched_at = null where id = $1", [zeitz]);
 check("unlinking forgets the Google place and its coordinates", (await one("adele", "select google_place_id, lat from public.places where id = $1", [zeitz])).lat === null);
 // deletePlace: either member, and the visits and ratings go with it
+// a note, and a plan to go that points at the place
+await as("adele", "update public.places set note = 'For the ramen' where id = $1", [place]);
+check("members can note why they want to go", (await one("brandon", "select note from public.places where id = $1", [place])).note === "For the ramen");
+await fails("a note is at most 500 characters", "brandon", "update public.places set note = repeat('x', 501) where id = $1", [place], /check constraint/);
+const plan = (await one("brandon", "insert into public.events (title, day, start_time, place_id) values ('Nobu', $1, '19:00', $2) returning id", [today, place])).id;
+check("a plan can point at a place", (await one("adele", "select place_id from public.events where id = $1", [plan])).place_id === place);
+const evePlace = (await one("eve", "select id from public.places limit 1")).id;
+await fails("a plan can't point at another Together's place", "brandon", "insert into public.events (title, day, place_id) values ('Sneaky', $1, $2)", [today, evePlace], /foreign key|violates/);
 await as("adele", "delete from public.places where id = $1", [place]);
+check("deleting a place keeps its plans on the calendar, unlinked", (await one("brandon", "select place_id from public.events where id = $1", [plan]))?.place_id === null);
 check("deleting a place removes its visits and ratings", (await one("brandon", "select (select count(*) from public.visits where place_id = $1)::int + (select count(*) from public.place_ratings where place_id = $1)::int n", [place])).n === 0);
 check("Eve's places are untouched", (await one("eve", "select count(*)::int n from public.places")).n === 1);
 

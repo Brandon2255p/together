@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Route } from "next";
 import type { EventDraft } from "@/components/calendar/add-event-sheet";
 import type { AgendaRow } from "@/components/calendar/calendar-screen";
 import { addEvent, deleteEvent, getEvents, updateEvent } from "@/lib/actions/calendar";
 import { agendaFor, gridRange, monthGrid } from "@/lib/calendar/month";
 import { dayDate, monthName, shortDay, toKey } from "@/lib/format";
 import { TEMP, type Optimistic } from "../_lib/optimistic";
-import type { CalendarEvent, Chore, DayKey, Member, Together } from "@/lib/models";
+import type { CalendarEvent, Chore, DayKey, Member, NewEvent, Together } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
 import { useChoreSheet } from "../_lib/use-chore-sheet";
 import { useChores } from "../_lib/use-chores";
@@ -15,7 +16,8 @@ import { useChores } from "../_lib/use-chores";
 export interface CalendarViewData {
   together: Together;
   today: DayKey;
-  /** the current month's grid */
+  /** the day it opens on (today, or ?day=), and whose month's grid `events` covers */
+  selected: DayKey;
   events: CalendarEvent[];
   chores: Chore[];
 }
@@ -28,15 +30,17 @@ const longDay = (key: DayKey) =>
 export function useCalendarViewModel(data: CalendarViewData) {
   const { together, today } = data;
   const t = dayDate(today);
-  const [month, setMonth] = useState({ year: t.getUTCFullYear(), month: t.getUTCMonth() });
-  const [selected, setSelected] = useState<DayKey>(today);
+  // the month the page loaded
+  const start = dayDate(data.selected);
+  const [month, setMonth] = useState({ year: start.getUTCFullYear(), month: start.getUTCMonth() });
+  const [selected, setSelected] = useState<DayKey>(data.selected);
   const [events, setEvents] = useState<Optimistic<CalendarEvent>[]>(data.events);
-  // the page loads this month; another month shown here is fetched again when the page reloads (live changes)
+  // the page loads the starting month; another month shown here is fetched again when the page reloads (live changes)
   const [loaded, setLoaded] = useState(data.events);
   const [stale, setStale] = useState(false);
   if (loaded !== data.events) {
     setLoaded(data.events);
-    if (month.year === t.getUTCFullYear() && month.month === t.getUTCMonth()) setEvents(data.events);
+    if (month.year === start.getUTCFullYear() && month.month === start.getUTCMonth()) setEvents(data.events);
     else setStale(true);
   }
   useEffect(() => {
@@ -84,7 +88,7 @@ export function useCalendarViewModel(data: CalendarViewData) {
   }
 
   /** optimistic too: the change shows at once; if saving fails it goes back, and the sheet opens again with the draft */
-  async function onUpdate(id: string, event: Omit<CalendarEvent, "id">) {
+  async function onUpdate(id: string, event: NewEvent) {
     const before = events;
     const submitted = draft;
     setEvents((es) => es.map((e) => (e.id === id ? { ...e, ...event } : e)));
@@ -118,7 +122,7 @@ export function useCalendarViewModel(data: CalendarViewData) {
     };
     if (editingId) return onUpdate(editingId, event);
     const tempId = `${TEMP}${Date.now()}`;
-    setEvents((es) => [...es, { ...event, id: tempId }]);
+    setEvents((es) => [...es, { ...event, id: tempId, place: null }]);
     setSelected(draft.day);
     setAddOpen(false);
     setAddError(null);
@@ -212,6 +216,7 @@ export function useCalendarViewModel(data: CalendarViewData) {
             when: `${longDay(open.day)} · ${open.time ?? "All day"}`,
             where: open.location,
             people: people(open.attendees),
+            place: open.place ? { name: open.place.name, href: `/places/${open.place.id}` as Route } : null,
           }
         : null,
       onClose: () => setOpenId(null),
