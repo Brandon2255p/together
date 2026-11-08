@@ -5,6 +5,7 @@ import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
 import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, UserRoundIcon } from "lucide-react";
 import type { Member, MemberTone } from "@/lib/models";
+import { Flame } from "@/components/challenges/art";
 import { ManagePill } from "@/components/together/manage-pill";
 import { SwitcherPill } from "@/components/together/switcher-pill";
 import { AddChoreSheet, type AddChoreSheetProps } from "@/components/lists/add-chore-sheet";
@@ -21,6 +22,8 @@ export interface HomeScreenProps {
   members: Member[];
   /** the switcher pill: the current Together, and whether another one has news */
   switcher: { name: string; tone: MemberTone; hasNews: boolean };
+  /** the flame pill: the longest challenge streak going, and whether one needs a booster */
+  streak: { count: number; atRisk: boolean };
   upNext: { title: string; when: string; where: string | null; people: Member[] } | null;
   dueToday: ChoreRowData[];
   onChoreDoneChange: (id: string, done: boolean) => void;
@@ -29,7 +32,7 @@ export interface HomeScreenProps {
   choreSheet: AddChoreSheetProps;
   toBuy: number;
   wantToGo: number;
-  links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route; profile: Route };
+  links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route; profile: Route; challenges: Route };
   error: string | null;
 }
 
@@ -46,7 +49,7 @@ function Tile({ href, icon, tone, count, label }: { href: Route; icon: React.Rea
 }
 
 export function HomeScreen(props: HomeScreenProps) {
-  const { greeting, dateLabel, members, switcher, upNext, dueToday, onChoreDoneChange, onChoreOpen, choreSheet, toBuy, wantToGo, links, error } = props;
+  const { greeting, dateLabel, members, switcher, streak, upNext, dueToday, onChoreDoneChange, onChoreOpen, choreSheet, toBuy, wantToGo, links, error } = props;
   return (
     <Reveal className="flex flex-col gap-5">
       <RevealItem className="flex flex-col gap-3">
@@ -58,9 +61,20 @@ export function HomeScreen(props: HomeScreenProps) {
           eyebrow={dateLabel}
           title={greeting}
           actions={
+            <>
+            <Link
+              href={links.challenges}
+              aria-label={`Challenges: ${streak.count} streak${streak.atRisk ? ", one needs a booster" : ""}`}
+              className="relative flex h-9 items-center gap-1 rounded-full border border-line bg-surface pr-3 pl-2.5 text-body-strong transition-transform active:scale-[0.95]"
+            >
+              <Flame cold={streak.count === 0} flicker={streak.count > 0} className="h-5 w-4" />
+              {streak.count}
+              {streak.atRisk ? <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-partner ring-2 ring-bg" /> : null}
+            </Link>
             <Link href={links.profile} aria-label="You: your name and signing out" className={iconButtonVariants({ variant: "surface", size: "sm" })}>
               <UserRoundIcon aria-hidden />
             </Link>
+            </>
           }
         />
       </RevealItem>

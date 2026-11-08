@@ -1,6 +1,11 @@
+import { periodStartOf, previousPeriod } from "@/lib/challenges/streak";
 import { addDays, todayKey } from "@/lib/format";
 import type {
   CalendarEvent,
+  Challenge,
+  ChallengeCadence,
+  ChallengeOutcome,
+  DayKey,
   CatalogEntry,
   Chore,
   Goal,
@@ -29,8 +34,86 @@ export interface StubState {
   places: Place[];
   wishes: WishItem[];
   goals: Goal[];
+  challenges: StubChallenge[];
   /** devices that asked for reminders, and who's signed in on each */
   nextId: number;
+}
+
+/** a challenge as the stub keeps it: progress per goal per period, materialised for today when read */
+export interface StubChallenge extends Omit<Challenge, "goals" | "periodStart"> {
+  goals: { id: string; title: string; target: number }[];
+  /** goal id → period start → count */
+  progress: Record<string, Record<DayKey, number>>;
+}
+
+/**
+ * A seed challenge: `history` is its ended periods, oldest first (null = missed), and `now` this period's counts by
+ * goal. It starts `history.length` periods before the current one.
+ */
+function seedChallenge(
+  today: DayKey,
+  c: { id: string; title: string; cadence: ChallengeCadence; memberIds: string[]; goals: [string, number][]; history: (ChallengeOutcome | null)[]; now: number[] },
+): StubChallenge {
+  const current = periodStartOf(c.cadence, today);
+  const starts: DayKey[] = [];
+  let p = current;
+  for (let i = 0; i < c.history.length; i++) starts.unshift((p = previousPeriod(c.cadence, p)));
+  const goals = c.goals.map(([title, target], i) => ({ id: `${c.id}-g${i + 1}`, title, target }));
+  return {
+    id: c.id,
+    title: c.title,
+    cadence: c.cadence,
+    startsOn: starts[0] ?? current,
+    memberIds: c.memberIds,
+    goals,
+    progress: Object.fromEntries(goals.map((g, i) => [g.id, { [current]: c.now[i] ?? 0 }])),
+    periods: c.history.flatMap((outcome, i) => (outcome ? [{ start: starts[i]!, outcome }] : [])).reverse(),
+  };
+}
+
+const times = <T>(n: number, value: T): T[] => Array.from({ length: n }, () => value);
+
+/** Brandon & Adele's challenges: a long daily streak, a weekly one with a booster used, one at risk, a monthly one */
+function seedChallenges(today: DayKey): StubChallenge[] {
+  return [
+    seedChallenge(today, {
+      id: "ch-1",
+      title: "Move every day",
+      cadence: "daily",
+      memberIds: [BRANDON.id],
+      goals: [["30 min walk or run", 1], ["Stretch", 1], ["Glasses of water", 8]],
+      history: times(22, "done"),
+      now: [1, 1, 5],
+    }),
+    seedChallenge(today, {
+      id: "ch-2",
+      title: "Gym together",
+      cadence: "weekly",
+      memberIds: [BRANDON.id, ADELE.id],
+      goals: [["Go to the gym", 3], ["Meal prep on Sunday", 1], ["10k steps", 5]],
+      history: [null, ...times(5, "done" as const), "boosted", ...times(6, "done" as const)],
+      now: [2, 1, 3],
+    }),
+    seedChallenge(today, {
+      id: "ch-3",
+      title: "Read before bed",
+      cadence: "daily",
+      memberIds: [ADELE.id, BRANDON.id],
+      goals: [["Read 20 pages", 1], ["Phone away by 10", 1]],
+      // yesterday was missed: the streak is at risk, and there's a booster to save it with
+      history: [...times(9, "done" as const), null],
+      now: [1, 0],
+    }),
+    seedChallenge(today, {
+      id: "ch-4",
+      title: "Date night",
+      cadence: "monthly",
+      memberIds: [BRANDON.id, ADELE.id],
+      goals: [["Go on a date", 2], ["Try somewhere new", 1]],
+      history: times(5, "done"),
+      now: [0, 0],
+    }),
+  ];
 }
 
 type SeedPlace = Omit<Place, "street" | "city" | "province" | "country" | "googlePlaceId" | "location"> &
@@ -166,6 +249,7 @@ export function seed(today = todayKey()): StubState {
       { id: "g-1", title: "Weekend in Paternoster", saved: 4200, target: 8000, ownerIds: [BRANDON.id, ADELE.id] },
       { id: "g-2", title: "New road bike", saved: 6500, target: 18000, ownerIds: [BRANDON.id] },
     ],
+    challenges: seedChallenges(today),
     nextId: 100,
   };
 }
@@ -193,6 +277,7 @@ export function blankState(together: Together | null, nextId = 100): StubState {
     places: [],
     wishes: [],
     goals: [],
+    challenges: [],
     nextId,
   };
 }

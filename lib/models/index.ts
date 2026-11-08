@@ -291,6 +291,56 @@ export type NewWish = Pick<WishItem, "name" | "price" | "url">;
 
 export type NewGoal = Pick<Goal, "title" | "target" | "ownerIds">;
 
+// ---- Challenges -----------------------------------------------------------
+
+/** how often a challenge's goals repeat. Weeks run Monday to Sunday; months from the 1st. */
+export type ChallengeCadence = "daily" | "weekly" | "monthly";
+
+export interface ChallengeGoal {
+  id: string;
+  title: string;
+  /** 1 is a tick ("Meal prep on Sunday"); more is a count ("Gym 3× a week") */
+  target: number;
+  /** how far along it is in the current period */
+  count: number;
+}
+
+/**
+ * What became of a period. A period with no outcome that has ended was missed.
+ * `boosted`: a streak booster covered it. `reset`: it was missed and you chose to let the streak go.
+ */
+export type ChallengeOutcome = "done" | "boosted" | "reset";
+
+export interface ChallengePeriod {
+  /** the period's first day: the day, the Monday or the 1st */
+  start: DayKey;
+  outcome: ChallengeOutcome;
+}
+
+export interface Challenge {
+  id: string;
+  title: string;
+  cadence: ChallengeCadence;
+  /** the first period's first day; a Monday for weekly and the 1st for monthly */
+  startsOn: DayKey;
+  /** who's in it; any of them can tick a goal */
+  memberIds: MemberId[];
+  /** in order, with their progress in `periodStart`'s period */
+  goals: ChallengeGoal[];
+  /** the period the goals' counts are for (the current one, or the first when it hasn't started) */
+  periodStart: DayKey;
+  /** every period with an outcome, newest first */
+  periods: ChallengePeriod[];
+}
+
+export interface NewChallenge {
+  title: string;
+  cadence: ChallengeCadence;
+  startsOn: DayKey;
+  memberIds: MemberId[];
+  goals: Pick<ChallengeGoal, "title" | "target">[];
+}
+
 // ---- Reminders ------------------------------------------------------------
 
 /** a browser's or installed app's Web Push subscription (PushSubscription.toJSON()) */

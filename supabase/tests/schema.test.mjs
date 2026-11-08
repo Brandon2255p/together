@@ -175,6 +175,35 @@ const goal = (await one("brandon", "insert into public.goals (title, saved_cents
 await as("brandon", "insert into public.goal_owners (goal_id, profile_id) values ($1, $2), ($1, $3)", [goal, U.brandon, U.adele]);
 check("shared goal has two owners", (await one("adele", "select count(*)::int n from public.goal_owners")).n === 2);
 
+// challenges
+const localToday = "(now() at time zone 'Africa/Johannesburg')::date";
+const thisMonday = `public.challenge_period_start('weekly', ${localToday})`;
+check("weeks start on Monday", (await one("brandon", "select public.challenge_period_start('weekly', '2026-11-08') d")).d.toISOString().startsWith("2026-11-02"));
+check("months start on the 1st", (await one("brandon", "select public.challenge_period_start('monthly', '2026-11-18') d")).d.toISOString().startsWith("2026-11-01"));
+const newChallenge = (startsOn, goals = '[{"title":"Gym","target":3},{"title":"Meal prep","target":1}]') =>
+  `select public.v1_create_challenge('Gym together', 'weekly', ${startsOn}, array['${U.brandon}','${U.adele}']::uuid[], '${goals}'::jsonb) id`;
+await fails("a weekly challenge starts on a Monday", "brandon", newChallenge(`${thisMonday} + 2`), [], /check constraint/);
+await fails("a challenge needs a goal", "brandon", newChallenge(thisMonday, "[]"), [], /at least one goal/);
+const challenge = (await one("brandon", newChallenge(thisMonday))).id;
+check("Adele sees the challenge, its goals and who's in", (await rows("adele", "select * from public.challenge_goals where challenge_id = $1", [challenge])).length === 2
+  && (await rows("adele", "select * from public.challenge_members where challenge_id = $1", [challenge])).length === 2);
+check("Eve doesn't", (await rows("eve", "select * from public.challenges")).length === 0);
+const [gym, prep] = (await rows("brandon", "select id from public.challenge_goals where challenge_id = $1 order by position", [challenge])).map((r) => r.id);
+await as("brandon", "select public.v1_set_challenge_goal_count($1, 7)", [gym]);
+check("a count stops at its target", (await one("adele", "select count from public.challenge_progress where goal_id = $1", [gym])).count === 3);
+check("the week isn't done with a goal left", (await rows("adele", "select * from public.challenge_periods where challenge_id = $1", [challenge])).length === 0);
+await as("adele", "select public.v1_set_challenge_goal_count($1, 1)", [prep]);
+const marked = await rows("brandon", "select outcome, period_start = " + thisMonday + " this_week from public.challenge_periods where challenge_id = $1", [challenge]);
+check("finishing the last goal marks this week done", marked.length === 1 && marked[0].outcome === "done" && marked[0].this_week, JSON.stringify(marked));
+await as("brandon", "select public.v1_set_challenge_goal_count($1, 2)", [gym]);
+check("undoing a goal unmarks it", (await rows("brandon", "select * from public.challenge_periods where challenge_id = $1", [challenge])).length === 0);
+const later = (await one("brandon", newChallenge(`${thisMonday} + 7`))).id;
+const laterGoal = (await one("brandon", "select id from public.challenge_goals where challenge_id = $1 limit 1", [later])).id;
+await fails("goals can't be ticked before the challenge starts", "brandon", "select public.v1_set_challenge_goal_count($1, 1)", [laterGoal], /hasn't started/);
+await as("adele", `insert into public.challenge_periods (challenge_id, period_start, outcome) values ($1, ${thisMonday} - 7, 'boosted')`, [challenge]);
+check("a booster can cover last week", (await one("brandon", "select outcome from public.challenge_periods where challenge_id = $1", [challenge])).outcome === "boosted");
+await fails("Eve can't touch their challenge", "eve", "select public.v1_set_challenge_goal_count($1, 1)", [gym], /removed/);
+
 // many Togethers (v2 functions and friends)
 const owner = async (t) => (await db.query("select profile_id from public.together_members where together_id = $1 and role = 'owner' and left_at is null", [t])).rows.map((r) => r.profile_id);
 check("the creator is the owner", (await owner(tB)).join() === U.brandon);

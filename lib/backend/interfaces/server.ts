@@ -1,5 +1,7 @@
 import type {
   CalendarEvent,
+  Challenge,
+  NewChallenge,
   CatalogEntry,
   NewEvent,
   NewGoal,
@@ -128,4 +130,15 @@ export interface ServerBackendService {
   addGoal(params: NewGoal): Promise<DataResult<Goal>>;
   /** sets how much has been saved towards a goal */
   setGoalSaved(params: { id: string; saved: number }): Promise<DataResult<Goal>>;
+
+  // Challenges: goals that repeat each day, week (Monday to Sunday) or month (from the 1st), with a streak
+  /** every challenge, with its goals' progress in the current period */
+  getChallenges(): Promise<DataResult<Challenge[]>>;
+  getChallenge(params: { id: string }): Promise<DataResult<Challenge>>;
+  addChallenge(params: NewChallenge): Promise<DataResult<Challenge>>;
+  /** sets a goal's progress in the current period (0 to its target); the period is done once every goal is */
+  setChallengeGoalCount(params: { goalId: string; count: number }): Promise<DataResult<Challenge>>;
+  /** settles a missed period that's at risk: a booster covers it, or the streak is let go */
+  settleMissedPeriod(params: { id: string; useBooster: boolean }): Promise<DataResult<Challenge>>;
+  deleteChallenge(params: { id: string }): Promise<MutationResult>;
 }
