@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { getEvents } from "@/lib/actions/calendar";
+import { getChallenges } from "@/lib/actions/challenges";
 import { getChores, getShoppingItems } from "@/lib/actions/lists";
 import { getPlaces } from "@/lib/actions/places";
 import { listMyTogethers } from "@/lib/actions/together";
@@ -14,12 +15,13 @@ export default async function HomePage() {
   await connection();
   const together = await requireTogether();
   const today = todayKey();
-  const [chores, shopping, places, events, togethers] = await Promise.all([
+  const [chores, shopping, places, events, togethers, challenges] = await Promise.all([
     getChores(),
     getShoppingItems(),
     getPlaces(),
     getEvents(today, addDays(today, 14)),
     listMyTogethers(),
+    getChallenges(),
   ]);
   return (
     <HomeView
@@ -32,6 +34,8 @@ export default async function HomePage() {
         events: must(events, "the calendar"),
         // the pill still works without the list; it just shows no dot
         togethers: togethers.data ?? [],
+        // the flame pill still links to Challenges without them
+        challenges: challenges.data ?? [],
       }}
     />
   );

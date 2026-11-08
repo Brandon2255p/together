@@ -13,6 +13,11 @@ alter publication supabase_realtime add table
   public.wishes,
   public.goals,
   public.goal_owners,
+  public.challenges,
+  public.challenge_members,
+  public.challenge_goals,
+  public.challenge_progress,
+  public.challenge_periods,
   public.togethers,
   public.together_members,
   public.profiles;

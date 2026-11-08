@@ -2,7 +2,8 @@
 
 import type { Route } from "next";
 import { dueLabel, greeting, hourNow, longDate } from "@/lib/format";
-import type { CalendarEvent, Chore, DayKey, Member, Together, TogetherSummary } from "@/lib/models";
+import { summarize } from "@/lib/challenges/streak";
+import type { CalendarEvent, Challenge, Chore, DayKey, Member, Together, TogetherSummary } from "@/lib/models";
 import { toChoreRow } from "../_lib/chore-rows";
 import { useChoreSheet } from "../_lib/use-chore-sheet";
 import { useChores } from "../_lib/use-chores";
@@ -17,6 +18,8 @@ export interface HomeViewData {
   events: CalendarEvent[];
   /** all your Togethers, for the switcher pill */
   togethers: TogetherSummary[];
+  /** for the flame pill: the longest streak going */
+  challenges: Challenge[];
 }
 
 const LINKS = {
@@ -27,6 +30,7 @@ const LINKS = {
   together: "/together" as Route,
   togethers: "/togethers" as Route,
   profile: "/profile" as Route,
+  challenges: "/challenges" as Route,
 };
 
 export function useHomeViewModel(data: HomeViewData) {
@@ -52,6 +56,8 @@ export function useHomeViewModel(data: HomeViewData) {
     .filter((c) => c.due !== null && c.due <= today && (c.assignees.includes(together.meId) || c.assignees.length > 1))
     .map((c) => toChoreRow(c, together.members, today));
 
+  const streaks = data.challenges.map((c) => summarize(c, today));
+
   return {
     greeting: `${greeting(hourNow())}, ${me?.name ?? "you"}`,
     dateLabel: longDate(today),
@@ -60,6 +66,10 @@ export function useHomeViewModel(data: HomeViewData) {
       name: together.name,
       tone: me?.tone ?? "accent",
       hasNews: data.togethers.some((t) => !t.current && t.hasNews),
+    },
+    streak: {
+      count: Math.max(0, ...streaks.map((s) => s.streak)),
+      atRisk: streaks.some((s) => s.atRisk !== null),
     },
     upNext,
     dueToday,

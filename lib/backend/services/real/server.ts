@@ -4,6 +4,10 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import type { ServerBackendService } from "@/lib/backend/interfaces/server";
 import type {
   CalendarEvent,
+  Challenge,
+  ChallengeCadence,
+  ChallengeOutcome,
+  NewChallenge,
   CatalogEntry,
   Chore,
   ChoreRepeat,
@@ -37,6 +41,8 @@ import type {
   TogetherSummary,
   WishItem,
 } from "@/lib/models";
+import { PERIOD_NOUN, periodStartOf, summarize } from "@/lib/challenges/streak";
+import { addDays, todayKey } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { autocomplete, findPlaceId, getPlace as getGooglePlaceDetails } from "@/lib/google/places";
 
@@ -156,12 +162,27 @@ interface GoalRow {
   goal_owners: { profile_id: string }[];
 }
 
+interface ChallengeRow {
+  id: string;
+  title: string;
+  cadence: ChallengeCadence;
+  starts_on: string;
+  challenge_members: { profile_id: string }[];
+  challenge_goals: { id: string; title: string; target: number; position: number; challenge_progress: { period_start: string; count: number }[] }[];
+  challenge_periods: { period_start: string; outcome: ChallengeOutcome }[];
+}
+
 const TOGETHER_SELECT =
   "id, name, invite_code, invite_expires_at, together_members (profile_id, tone, role, joined_at, left_at, profiles (name))";
 const CHORE_SELECT = "id, title, due, repeat, done_at, chore_assignees (profile_id)";
 const EVENT_SELECT = "id, title, day, start_time, location, event_attendees (profile_id), places (id, name)";
 const PLACE_SELECT =
   "id, name, category, area, street, city, province, country, maps_url, note, status, hue, google_place_id, lat, lng, location_fetched_at, place_ratings (profile_id, rating), visits (id, day, title, note, rating)";
+
+const CHALLENGE_SELECT =
+  "id, title, cadence, starts_on, challenge_members (profile_id), challenge_goals (id, title, target, position, challenge_progress (period_start, count)), challenge_periods (period_start, outcome)";
+/** progress is only read for the current period, which starts at most a month back */
+const PROGRESS_FROM = "challenge_goals.challenge_progress.period_start";
 
 // ---- Mapping rows to models ---------------------------------------------------
 
@@ -270,6 +291,30 @@ const toGoal = (row: GoalRow): Goal => ({
   target: Math.round(row.target_cents / 100),
   ownerIds: row.goal_owners.map((o) => o.profile_id),
 });
+
+function toChallenge(row: ChallengeRow, today: string): Challenge {
+  const cadence = row.cadence;
+  const periodStart = row.starts_on > today ? row.starts_on : periodStartOf(cadence, today);
+  return {
+    id: row.id,
+    title: row.title,
+    cadence,
+    startsOn: row.starts_on,
+    memberIds: row.challenge_members.map((m) => m.profile_id),
+    goals: [...row.challenge_goals]
+      .sort((a, b) => a.position - b.position)
+      .map((g) => ({
+        id: g.id,
+        title: g.title,
+        target: g.target,
+        count: g.challenge_progress.find((p) => p.period_start === periodStart)?.count ?? 0,
+      })),
+    periodStart,
+    periods: row.challenge_periods
+      .map((p) => ({ start: p.period_start, outcome: p.outcome }))
+      .sort((a, b) => b.start.localeCompare(a.start)),
+  };
+}
 
 // ---- Results --------------------------------------------------------------------
 
@@ -950,5 +995,83 @@ export class RealServerService implements ServerBackendService {
       .overrideTypes<GoalRow | null, { merge: false }>();
     if (error) return fail(message(error, "We couldn't load that goal."));
     return data ? ok(toGoal(data)) : fail("That goal was removed.");
+  }
+
+  // ---- Challenges ---------------------------------------------------------------
+
+  async getChallenges(): Promise<DataResult<Challenge[]>> {
+    const sb = await createClient();
+    const today = todayKey();
+    const { data, error } = await sb
+      .from("challenges")
+      .select(CHALLENGE_SELECT)
+      .gte(PROGRESS_FROM, addDays(today, -31))
+      .order("created_at", { ascending: false })
+      .overrideTypes<ChallengeRow[], { merge: false }>();
+    if (error) return fail(message(error, "We couldn't load your challenges."));
+    return ok(data.map((row) => toChallenge(row, today)));
+  }
+
+  async getChallenge({ id }: { id: string }): Promise<DataResult<Challenge>> {
+    const sb = await createClient();
+    const today = todayKey();
+    const { data, error } = await sb
+      .from("challenges")
+      .select(CHALLENGE_SELECT)
+      .eq("id", id)
+      .gte(PROGRESS_FROM, addDays(today, -31))
+      .maybeSingle()
+      .overrideTypes<ChallengeRow | null, { merge: false }>();
+    if (error) return fail(message(error, "We couldn't load that challenge."));
+    return data ? ok(toChallenge(data, today)) : fail("That challenge was removed.");
+  }
+
+  async addChallenge({ title, cadence, startsOn, memberIds, goals }: NewChallenge): Promise<DataResult<Challenge>> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_create_challenge", {
+      p_title: title,
+      p_cadence: cadence,
+      p_starts_on: startsOn,
+      p_member_ids: memberIds,
+      p_goals: goals,
+    });
+    const { error } = result;
+    const id: unknown = result.data;
+    if (error) return fail(message(error, "We couldn't start that challenge. Try again."));
+    return typeof id === "string" ? this.getChallenge({ id }) : fail(TRY_AGAIN);
+  }
+
+  async setChallengeGoalCount({ goalId, count }: { goalId: string; count: number }): Promise<DataResult<Challenge>> {
+    const sb = await createClient();
+    const { error } = await sb.rpc("v1_set_challenge_goal_count", { p_goal_id: goalId, p_count: count });
+    if (error) return fail(message(error, "We couldn't save that. Try again."));
+    const { data } = await sb
+      .from("challenge_goals")
+      .select("challenge_id")
+      .eq("id", goalId)
+      .maybeSingle()
+      .overrideTypes<{ challenge_id: string } | null, { merge: false }>();
+    return data ? this.getChallenge({ id: data.challenge_id }) : fail("That goal was removed.");
+  }
+
+  async settleMissedPeriod({ id, useBooster }: { id: string; useBooster: boolean }): Promise<DataResult<Challenge>> {
+    const challenge = await this.getChallenge({ id });
+    if (!challenge.data) return challenge;
+    // boosters are worked out from the history, so check there's one before spending it
+    const summary = summarize(challenge.data, todayKey());
+    if (!summary.atRisk) return fail(`There's no missed ${PERIOD_NOUN[challenge.data.cadence]} to save.`);
+    if (useBooster && summary.boosters < 1) return fail("There are no boosters left.");
+    const sb = await createClient();
+    const { error } = await sb
+      .from("challenge_periods")
+      .insert({ challenge_id: id, period_start: summary.atRisk.start, outcome: useBooster ? "boosted" : "reset" });
+    if (error) return fail(message(error, "We couldn't save that. Try again."));
+    return this.getChallenge({ id });
+  }
+
+  async deleteChallenge({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("challenges").delete().eq("id", id);
+    return error ? notSaved(message(error, "We couldn't delete that challenge. Try again.")) : saved;
   }
 }

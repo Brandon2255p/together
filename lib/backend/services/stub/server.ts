@@ -1,8 +1,11 @@
 import "server-only";
-import { addDays } from "@/lib/format";
+import { allGoalsDone, PERIOD_NOUN, periodStartOf, summarize } from "@/lib/challenges/streak";
+import { addDays, todayKey } from "@/lib/format";
 import type { ServerBackendService } from "@/lib/backend/interfaces/server";
 import type {
   CalendarEvent,
+  Challenge,
+  NewChallenge,
   Chore,
   Coordinates,
   DataResult,
@@ -29,7 +32,7 @@ import type {
   WishItem,
 } from "@/lib/models";
 import { stubAutocomplete, stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
-import { BRANDON, blankState } from "@/lib/backend/services/stub/seed";
+import { BRANDON, blankState, type StubChallenge } from "@/lib/backend/services/stub/seed";
 import { state, world } from "@/lib/backend/services/stub/state";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis): every
@@ -74,6 +77,18 @@ function asOwner(): { together: Together } | { error: string } {
   if (!together) return { error: NO_TOGETHER };
   if (together.members.find((m) => m.id === ME)?.role !== "owner") return { error: "Only an owner can do that." };
   return { together };
+}
+
+/** a stub challenge as the app sees it today: the goals' counts are the current period's */
+function toChallenge(c: StubChallenge, today = todayKey()): Challenge {
+  const periodStart = c.startsOn > today ? c.startsOn : periodStartOf(c.cadence, today);
+  const { progress, ...rest } = c;
+  return {
+    ...rest,
+    periodStart,
+    goals: c.goals.map((g) => ({ ...g, count: progress[g.id]?.[periodStart] ?? 0 })),
+    periods: [...c.periods].sort((a, b) => b.start.localeCompare(a.start)),
+  };
 }
 
 /** the place a plan links to: null for none, undefined when there's no such place */
@@ -622,5 +637,75 @@ export class StubServerService implements ServerBackendService {
     if (!goal) return fail<Goal>("That goal was removed.");
     goal.saved = saved;
     return ok(goal);
+  }
+
+  // ---- Challenges ---------------------------------------------------------------
+
+  async getChallenges() {
+    await wait();
+    log("getChallenges");
+    return ok(state().challenges.map((c) => toChallenge(c)));
+  }
+
+  async getChallenge({ id: challengeId }: { id: string }) {
+    await wait();
+    log("getChallenge", { id: challengeId });
+    const c = state().challenges.find((x) => x.id === challengeId);
+    return c ? ok(toChallenge(c)) : fail<Challenge>("That challenge was removed.");
+  }
+
+  async addChallenge(params: NewChallenge) {
+    await wait();
+    log("addChallenge", params);
+    if (periodStartOf(params.cadence, params.startsOn) !== params.startsOn) return fail<Challenge>("A challenge starts on the first day of a period.");
+    const challengeId = id("ch");
+    const added: StubChallenge = {
+      id: challengeId,
+      title: params.title,
+      cadence: params.cadence,
+      startsOn: params.startsOn,
+      memberIds: params.memberIds,
+      goals: params.goals.map((g, i) => ({ id: `${challengeId}-g${i + 1}`, title: g.title, target: g.target })),
+      progress: {},
+      periods: [],
+    };
+    state().challenges.unshift(added);
+    return ok(toChallenge(added));
+  }
+
+  async setChallengeGoalCount({ goalId, count }: { goalId: string; count: number }) {
+    await wait();
+    log("setChallengeGoalCount", { goalId, count });
+    const c = state().challenges.find((x) => x.goals.some((g) => g.id === goalId));
+    const goal = c?.goals.find((g) => g.id === goalId);
+    if (!c || !goal) return fail<Challenge>("That goal was removed.");
+    const today = todayKey();
+    if (c.startsOn > today) return fail<Challenge>("This challenge hasn't started yet.");
+    const period = periodStartOf(c.cadence, today);
+    (c.progress[goalId] ??= {})[period] = Math.max(0, Math.min(goal.target, Math.round(count)));
+    // the period is done while every goal is; un-ticking one undoes it
+    c.periods = c.periods.filter((p) => !(p.start === period && p.outcome === "done"));
+    if (allGoalsDone(toChallenge(c, today).goals)) c.periods.push({ start: period, outcome: "done" });
+    return ok(toChallenge(c, today));
+  }
+
+  async settleMissedPeriod({ id: challengeId, useBooster }: { id: string; useBooster: boolean }) {
+    await wait();
+    log("settleMissedPeriod", { id: challengeId, useBooster });
+    const c = state().challenges.find((x) => x.id === challengeId);
+    if (!c) return fail<Challenge>("That challenge was removed.");
+    const today = todayKey();
+    const summary = summarize(toChallenge(c, today), today);
+    if (!summary.atRisk) return fail<Challenge>(`There's no missed ${PERIOD_NOUN[c.cadence]} to save.`);
+    if (useBooster && summary.boosters < 1) return fail<Challenge>("There are no boosters left.");
+    c.periods.push({ start: summary.atRisk.start, outcome: useBooster ? "boosted" : "reset" });
+    return ok(toChallenge(c, today));
+  }
+
+  async deleteChallenge({ id: challengeId }: { id: string }) {
+    await wait();
+    log("deleteChallenge", { id: challengeId });
+    state().challenges = state().challenges.filter((c) => c.id !== challengeId);
+    return done;
   }
 }
