@@ -167,6 +167,21 @@ export class StubServerService implements ServerBackendService {
     return done;
   }
 
+  async calendarFeedToken({ reset }: { reset: boolean }) {
+    await wait();
+    log("calendarFeedToken", { reset });
+    const w = world();
+    const togetherId = state().together?.id;
+    if (!togetherId) return fail<string>(NO_TOGETHER);
+    const mineHere = ([, f]: [string, { togetherId: string; memberId: string }]) => f.togetherId === togetherId && f.memberId === ME;
+    const existing = Object.entries(w.calendarFeeds).find(mineHere)?.[0];
+    if (existing && !reset) return ok(existing);
+    if (existing) delete w.calendarFeeds[existing];
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
+    w.calendarFeeds[token] = { togetherId, memberId: ME };
+    return ok(token);
+  }
+
   async joinTogether({ code }: { code: string }) {
     await wait();
     log("joinTogether", { code });

@@ -128,6 +128,34 @@ const ev = (await one("brandon", "insert into public.events (title, day, start_t
 await as("brandon", "insert into public.event_attendees (event_id, profile_id) values ($1, $2), ($1, $3)", [ev, U.brandon, U.adele]);
 check("Adele sees the event with 2 attendees", (await one("adele", "select count(*)::int n from public.event_attendees where event_id = $1", [ev])).n === 2);
 
+// calendar feeds
+const feedToken = async (user, reset = false) => (await one(user, "select public.v1_calendar_feed_token($1) t", [reset])).t;
+const feed = async (token) => {
+  await db.exec("set role service_role");
+  try {
+    return (await db.query("select public.v1_calendar_feed($1) f", [token])).rows[0].f;
+  } finally {
+    await db.exec("reset role");
+  }
+};
+const bToken = await feedToken("brandon");
+check("feed token is 64 hex characters", /^[0-9a-f]{64}$/.test(bToken), bToken);
+check("asking again gives the same link", (await feedToken("brandon")) === bToken);
+const adeleToken = await feedToken("adele");
+check("each person gets their own link", adeleToken !== bToken);
+const bFeed = await feed(bToken);
+const dinner = bFeed?.events.find((e) => e.id === ev);
+check("feed has the Together's name and time zone", bFeed?.name === "B & A" && bFeed?.time_zone === "Africa/Johannesburg", JSON.stringify(bFeed && { name: bFeed.name, tz: bFeed.time_zone }));
+check("feed has the plan with its time and who's going", dinner?.time === "19:30" && dinner?.day === today && dinner?.attendees.join() === "brandon,adele", JSON.stringify(dinner));
+check("Eve's feed doesn't show their plans", !(await feed(await feedToken("eve"))).events.some((e) => e.id === ev));
+check("an unknown token opens nothing", (await feed("0".repeat(64))) === null);
+await fails("people can't read a feed by token", "eve", "select public.v1_calendar_feed($1)", [bToken], /permission denied/);
+check("nobody reads the tokens directly", (await rows("brandon", "select * from public.calendar_feeds")).length === 0);
+await fails("you need a Together for a feed", "fred", "select public.v1_calendar_feed_token()", [], /not in a Together/);
+const bReset = await feedToken("brandon", true);
+check("resetting gives a new link…", bReset !== bToken && (await feed(bReset)) !== null);
+check("…and the old one stops working", (await feed(bToken)) === null);
+
 // places
 const place = (await one("brandon", "insert into public.places (name, category, area) values ('Nobu', 'Japanese', 'Sea Point') returning id")).id;
 await as("brandon", "insert into public.place_ratings (place_id, rating) values ($1, 5)", [place]);
@@ -280,6 +308,7 @@ await as("adele", "delete from public.together_members where profile_id = auth.u
 check("deleting a membership directly does nothing", (await db.query("select count(*)::int n from public.together_members where profile_id = $1", [U.adele])).rows[0].n === 2);
 const landed = (await one("adele", "select public.v1_leave_together() id")).id;
 check("leaving lands you in another Together", landed === tF);
+check("leaving stops your calendar feed", (await feed(adeleToken)) === null);
 await as("brandon", "select public.v1_switch_together($1)", [tB]);
 check("what Adele added stays: her wish", (await rows("brandon", "select * from public.wishes where owner_id = $1", [U.adele])).length === 1);
 check("…and her chore assignment", (await one("brandon", "select count(*)::int n from public.chore_assignees")).n === 2);

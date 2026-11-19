@@ -7,10 +7,17 @@ import { blankState, seedWorld, type StubState, type StubWorld } from "@/lib/bac
 
 export interface StubMemory extends StubWorld {
   pushSubscriptions: (PushSubscriptionKeys & { memberId: string })[];
+  /** calendar feed links: token → whose and for which Together */
+  calendarFeeds: Record<string, { togetherId: string; memberId: string }>;
 }
 
 const g = globalThis as unknown as { __togetherStubWorld?: StubMemory };
-export const world = (): StubMemory => (g.__togetherStubWorld ??= { ...seedWorld(), pushSubscriptions: [] });
+export const world = (): StubMemory => {
+  const w = (g.__togetherStubWorld ??= { ...seedWorld(), pushSubscriptions: [], calendarFeeds: {} });
+  // a world kept from before feeds existed (hot reload)
+  w.calendarFeeds ??= {};
+  return w;
+};
 
 const NONE = blankState(null);
 
