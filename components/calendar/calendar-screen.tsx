@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronLeftIcon, ChevronRightIcon, CoffeeIcon, PlusIcon } from "lucide-react";
+import { CalendarSyncIcon, ChevronLeftIcon, ChevronRightIcon, CoffeeIcon, PlusIcon } from "lucide-react";
 import type { MonthDay } from "@/lib/calendar/month";
 import type { DayKey, Member, MemberTone } from "@/lib/models";
 import { AddChoreSheet, type AddChoreSheetProps } from "@/components/lists/add-chore-sheet";
@@ -12,6 +12,7 @@ import { InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout
 import { ListItem } from "@/components/ui/motion";
 import { AddEventSheet, type AddEventSheetProps } from "./add-event-sheet";
 import { EventSheet, type EventSheetData } from "./event-sheet";
+import { SyncSheet, type SyncSheetProps } from "./sync-sheet";
 import { cn } from "@/lib/utils";
 
 export type AgendaRow =
@@ -47,6 +48,9 @@ export interface CalendarScreenProps {
     pending: boolean;
     error: string | null;
   };
+  /** opens the sheet for subscribing from Google or Apple Calendar */
+  onSyncPress: () => void;
+  syncSheet: SyncSheetProps;
 }
 
 const DOT: Record<MemberTone | "chore", string> = { ...TONE_BG, chore: "bg-ink-subtle" };
@@ -55,7 +59,7 @@ const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 export function CalendarScreen(props: CalendarScreenProps) {
   const { monthLabel, yearLabel, weeks, today, selected, onSelect, onPrevMonth, onNextMonth, legend, agendaTitle, agenda, onChoreDoneChange, loading, error } = props;
-  const { onAddPress, addSheet, onEventOpen, eventSheet, onChoreOpen, choreSheet } = props;
+  const { onAddPress, addSheet, onEventOpen, eventSheet, onChoreOpen, choreSheet, onSyncPress, syncSheet } = props;
   return (
     <div className="flex flex-col gap-4">
       <ScreenHeader
@@ -68,6 +72,9 @@ export function CalendarScreen(props: CalendarScreenProps) {
             </IconButton>
             <IconButton label="Next month" onClick={onNextMonth}>
               <ChevronRightIcon />
+            </IconButton>
+            <IconButton label="Sync to your calendar" onClick={onSyncPress}>
+              <CalendarSyncIcon />
             </IconButton>
             <IconButton label="Add to calendar" variant="ink" onClick={onAddPress}>
               <PlusIcon />
@@ -192,6 +199,7 @@ export function CalendarScreen(props: CalendarScreenProps) {
       <AddEventSheet {...addSheet} />
       <EventSheet {...eventSheet} />
       <AddChoreSheet {...choreSheet} />
+      <SyncSheet {...syncSheet} />
     </div>
   );
 }

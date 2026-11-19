@@ -46,3 +46,8 @@ export async function updateEvent(id: string, event: NewEvent) {
 export async function deleteEvent(id: string) {
   return serverBackend.deleteEvent({ id });
 }
+
+/** your secret calendar feed token for the current Together; `reset` makes a new one and stops the old link */
+export async function getCalendarFeedToken(reset = false) {
+  return serverBackend.calendarFeedToken({ reset: reset === true });
+}
