@@ -2,6 +2,7 @@ import "server-only";
 import type { JobsBackendService } from "@/lib/backend/interfaces/jobs";
 import type { CalendarFeed, ChoreReminder, FeedEvent } from "@/lib/models";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAnonClient } from "@/lib/supabase/anon";
 
 interface ReminderRow {
   endpoint: string;
@@ -39,9 +40,8 @@ export class RealJobsService implements JobsBackendService {
   }
 
   async calendarFeed({ token }: { token: string }) {
-    const sb = createAdminClient();
-    if (!sb) return { data: null, error: "SUPABASE_SECRET_KEY isn't set" };
-    const result = await sb.rpc("v1_calendar_feed", { p_token: token });
+    // the token is the lock, so the publishable key will do: no secret key needed
+    const result = await createAnonClient().rpc("v1_calendar_feed", { p_token: token });
     if (result.error) return { data: null, error: result.error.message };
     const row = result.data as FeedRow | null;
     if (!row) return { data: null };

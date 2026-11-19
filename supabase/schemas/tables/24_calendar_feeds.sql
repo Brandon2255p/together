@@ -1,7 +1,7 @@
 -- Calendar feeds: a secret link per person per Together that Google Calendar, Apple Calendar or anything else that
 -- reads .ics can subscribe to. The token is the lock, so nobody reads this table directly: the app gets its own link
 -- through functions_v1/v1_calendar_feed_token.sql, and the feed route reads events through
--- functions_v1/v1_calendar_feed.sql with the secret key. Leaving the Together stops the link working.
+-- functions_v1/v1_calendar_feed.sql, which needs the token. Leaving the Together stops the link working.
 
 create table public.calendar_feeds (
   -- 64 hex characters from two random UUIDs

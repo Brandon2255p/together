@@ -149,7 +149,19 @@ check("feed has the Together's name and time zone", bFeed?.name === "B & A" && b
 check("feed has the plan with its time and who's going", dinner?.time === "19:30" && dinner?.day === today && dinner?.attendees.join() === "brandon,adele", JSON.stringify(dinner));
 check("Eve's feed doesn't show their plans", !(await feed(await feedToken("eve"))).events.some((e) => e.id === ev));
 check("an unknown token opens nothing", (await feed("0".repeat(64))) === null);
-await fails("people can't read a feed by token", "eve", "select public.v1_calendar_feed($1)", [bToken], /permission denied/);
+check("the feed works with just the token, signed in or not", (await rows("eve", "select public.v1_calendar_feed($1) f", [bToken]))[0].f?.name === "B & A");
+await db.exec("reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;");
+try {
+  const anon = (sql, params = []) => db.query(sql, params).then((r) => r.rows);
+  check("a calendar app (anon) reads the feed with the token", (await anon("select public.v1_calendar_feed($1) f", [bToken]))[0].f?.events.some((e) => e.id === ev));
+  check("…and gets nothing without a real one", (await anon("select public.v1_calendar_feed($1) f", ["f".repeat(64)]))[0].f === null);
+  check("anon can't read the tokens", (await anon("select * from public.calendar_feeds")).length === 0);
+  let made = true;
+  try { await anon("select public.v1_calendar_feed_token()"); } catch { made = false; }
+  check("anon can't make a link", !made);
+} finally {
+  await db.exec("reset role");
+}
 check("nobody reads the tokens directly", (await rows("brandon", "select * from public.calendar_feeds")).length === 0);
 await fails("you need a Together for a feed", "fred", "select public.v1_calendar_feed_token()", [], /not in a Together/);
 const bReset = await feedToken("brandon", true);

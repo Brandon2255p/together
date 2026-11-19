@@ -142,7 +142,7 @@ Stricter rules sit on top:
 | `v2_chore_reminders()` | Server job only: devices to remind, with chores due in every Together the person is still in (v1 also reminded people who had left) |
 | `v1_set_chore_done(id, done)` | Once-off: sets `done_at`. Recurring: logs the completion and moves `due` to the next date after today in the Together's time zone. Monthly keeps the day of the month (31 Jan → 28 Feb → 31 Mar). |
 | `v1_calendar_feed_token(reset)` | Your calendar feed token for the current Together, made on first call; `reset` swaps it so the old link stops working |
-| `v1_calendar_feed(token)` | Feed route only (secret key): the Together's name, time zone and plans from 90 days ago on, with place and who's going. Null for an unknown token or someone who left |
+| `v1_calendar_feed(token)` | The feed route, with the publishable key (the token is the lock): the Together's name, time zone and plans from 90 days ago on, with place and who's going. Null for an unknown token or someone who left |
 | `v1_item_catalog()` | Your history plus "popular" names. A name counts as popular only when at least 3 Togethers have added it, so one couple's list never leaks. |
 
 `togethers` has no insert policy, so you can only create or join one through these functions.
