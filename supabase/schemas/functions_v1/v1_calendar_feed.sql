@@ -1,5 +1,7 @@
--- For the calendar feed route (server only, with the secret key): the Together a feed token opens, with its plans from
--- 90 days ago on, each with its place and who's going. Null when the token matches nothing or its owner has left.
+-- For the calendar feed route: the Together a feed token opens, with its plans from 90 days ago on, each with its place
+-- and who's going. Null when the token matches nothing or its owner has left.
+-- Callable with the publishable key (calendar apps don't sign in): the 64-hex token is the lock, and without a valid one
+-- this returns nothing. Guessing one isn't feasible (256 random bits), so no secret key is needed.
 
 create function public.v1_calendar_feed(p_token text)
 returns jsonb
@@ -40,5 +42,5 @@ as $$
   where f.token = p_token;
 $$;
 
-revoke execute on function public.v1_calendar_feed(text) from public, anon, authenticated;
-grant execute on function public.v1_calendar_feed(text) to service_role;
+revoke execute on function public.v1_calendar_feed(text) from public;
+grant execute on function public.v1_calendar_feed(text) to anon, authenticated, service_role;

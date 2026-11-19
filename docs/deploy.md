@@ -32,7 +32,7 @@ docker run -p 3000:3000 -e USE_STUB_DATABASE=true together
 
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | runtime, optional | Chore reminders (Web Push). Make a key pair once with `pnpm dlx web-push generate-vapid-keys`; the subject is a `mailto:` address. Without them the Reminders card says reminders aren't set up. |
 | `CRON_SECRET` | runtime, optional | A long random string. The reminder job only runs for requests with `Authorization: Bearer <CRON_SECRET>`. |
-| `SUPABASE_SECRET_KEY` | runtime, optional | The service role key, for the reminder job and the calendar feed (`lib/supabase/admin.ts`). Without it, calendar subscriptions return 503. In the compose file it's `SERVICE_SUPABASESERVICE_KEY`. |
+| `SUPABASE_SECRET_KEY` | runtime, optional | The service role key, for the reminder job only (`lib/supabase/admin.ts`). The calendar feed doesn't need it. In the compose file it's `SERVICE_SUPABASESERVICE_KEY`. |
 
 `NEXT_PUBLIC_*` values are compiled into the browser bundle, so changing them means **rebuilding**, not just
 restarting. They're public by design. No secrets are needed at build time, and `.env*` files are excluded from the
