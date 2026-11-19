@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import type { Route } from "next";
 import type { EventDraft } from "@/components/calendar/add-event-sheet";
 import type { AgendaRow } from "@/components/calendar/calendar-screen";
-import { addEvent, deleteEvent, getEvents, updateEvent } from "@/lib/actions/calendar";
+import type { SyncLinks } from "@/components/calendar/sync-sheet";
+import { addEvent, deleteEvent, getCalendarFeedToken, getEvents, updateEvent } from "@/lib/actions/calendar";
 import { agendaFor, gridRange, monthGrid } from "@/lib/calendar/month";
 import { dayDate, monthName, shortDay, toKey } from "@/lib/format";
 import { TEMP, type Optimistic } from "../_lib/optimistic";
@@ -23,6 +24,13 @@ export interface CalendarViewData {
 }
 
 const emptyDraft = (day: DayKey, meId: string): EventDraft => ({ title: "", day, time: "", location: "", attendees: [meId] });
+
+/** the feed's https link, the webcal:// one calendar apps open to subscribe, and Google Calendar's add-by-URL page */
+function syncLinks(origin: string, token: string): SyncLinks {
+  const feed = `${origin}/api/calendar/${token}.ics`;
+  const webcal = feed.replace(/^https?:/, "webcal:");
+  return { feed, apple: webcal, google: `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}` };
+}
 
 const longDay = (key: DayKey) =>
   dayDate(key).toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
@@ -66,6 +74,11 @@ export function useCalendarViewModel(data: CalendarViewData) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [feedToken, setFeedToken] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const choreStore = useChores(data.chores);
   const { chores, error: choreError, toggle } = choreStore;
   const choreSheet = useChoreSheet(together, today, choreStore);
@@ -159,6 +172,37 @@ export function useCalendarViewModel(data: CalendarViewData) {
     setEvents(before.filter((e) => e.id !== id));
   }
 
+  /** opens the sync sheet, fetching (or making) the link the first time */
+  async function onSyncPress() {
+    setSyncOpen(true);
+    setSyncError(null);
+    if (feedToken) return;
+    const result = await getCalendarFeedToken();
+    if (!result.data) return setSyncError(result.error ?? "Couldn't make your calendar link.");
+    setFeedToken(result.data);
+  }
+
+  async function onSyncReset() {
+    setResetting(true);
+    setSyncError(null);
+    const result = await getCalendarFeedToken(true);
+    setResetting(false);
+    if (!result.data) return setSyncError(result.error ?? "Couldn't make a new link.");
+    setFeedToken(result.data);
+    setCopied(false);
+  }
+
+  async function onSyncCopy() {
+    if (!feedToken) return;
+    try {
+      await navigator.clipboard.writeText(syncLinks(window.location.origin, feedToken).feed);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setSyncError("Couldn't copy. Select the link and copy it yourself.");
+    }
+  }
+
   const open = events.find((e) => e.id === openId) ?? null;
 
   const agenda: AgendaRow[] = agendaFor(selected, events, chores).map((entry) => {
@@ -203,6 +247,18 @@ export function useCalendarViewModel(data: CalendarViewData) {
       pending: false,
       error: addError,
       mode: editingId ? ("edit" as const) : ("add" as const),
+    },
+    onSyncPress: () => void onSyncPress(),
+    syncSheet: {
+      open: syncOpen,
+      onOpenChange: setSyncOpen,
+      // the token only arrives after a click, so window is always there by then
+      links: feedToken ? syncLinks(window.location.origin, feedToken) : null,
+      copied,
+      onCopy: () => void onSyncCopy(),
+      onReset: () => void onSyncReset(),
+      resetting,
+      error: syncError,
     },
     onEventOpen: (id: string) => {
       setDeleteError(null);

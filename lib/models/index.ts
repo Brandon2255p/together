@@ -122,6 +122,30 @@ export interface CalendarEvent {
 /** `placeId` links the plan to a place; left out, an edit keeps whatever place the plan had */
 export type NewEvent = Omit<CalendarEvent, "id" | "place"> & { placeId?: string | null };
 
+/** a plan as the subscribable calendar feed (.ics) shows it */
+export interface FeedEvent {
+  id: string;
+  title: string;
+  day: DayKey;
+  /** HH:mm, or null for all day */
+  time: string | null;
+  location: string | null;
+  /** the place's name, when it's a plan to go to one */
+  placeName: string | null;
+  /** who's going, by name */
+  attendees: string[];
+  /** ISO time it was added */
+  createdAt: string;
+}
+
+/** what a calendar feed link opens: one Together's plans, for Google Calendar, Apple Calendar and the like */
+export interface CalendarFeed {
+  togetherName: string;
+  /** IANA zone the plans' days and times are in */
+  timeZone: string;
+  events: FeedEvent[];
+}
+
 // ---- Places ---------------------------------------------------------------
 
 export type PlaceStatus = "been" | "want";

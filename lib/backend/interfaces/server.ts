@@ -64,6 +64,8 @@ export interface ServerBackendService {
   /** remembers this device for chore reminders; a device that changes hands moves to whoever is signed in */
   savePushSubscription(params: PushSubscriptionKeys): Promise<MutationResult>;
   deletePushSubscription(params: { endpoint: string }): Promise<MutationResult>;
+  /** your secret calendar feed token for the current Together, made on first ask; `reset` swaps it for a new one */
+  calendarFeedToken(params: { reset: boolean }): Promise<DataResult<string>>;
 
   // Shopping
   getShoppingItems(): Promise<DataResult<ShoppingItem[]>>;

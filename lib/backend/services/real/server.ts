@@ -396,6 +396,13 @@ export class RealServerService implements ServerBackendService {
     return error ? notSaved(message(error, "We couldn't turn reminders off. Try again.")) : saved;
   }
 
+  async calendarFeedToken({ reset }: { reset: boolean }): Promise<DataResult<string>> {
+    const sb = await createClient();
+    const { data, error } = (await sb.rpc("v1_calendar_feed_token", { p_reset: reset })) as { data: unknown; error: PostgrestError | null };
+    if (error) return fail(message(error, "We couldn't make your calendar link. Try again."));
+    return typeof data === "string" ? ok(data) : fail("We couldn't make your calendar link. Try again.");
+  }
+
   async joinTogether({ code }: { code: string }): Promise<DataResult<Together>> {
     const sb = await createClient();
     const { error } = await sb.rpc("v2_join_together", { p_code: code });
