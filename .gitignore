@@ -8,12 +8,3 @@ build
 next-env.d.ts
 .DS_Store
 .vercel
-
-# Tailscale node state (private keys)
-ts/
-
-# self-hosted Supabase runtime data (the config files in volumes/ are tracked)
-volumes/storage/*
-!volumes/storage/.gitkeep
-volumes/snippets/*
-!volumes/snippets/.gitkeep

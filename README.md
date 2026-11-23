@@ -211,9 +211,8 @@ Motion is meant to be calm, not busy:
 
 ## Deploying
 
-Together can be deployed on Vercel, or self-hosted with Docker next to a self-hosted Supabase (Coolify). For the
-self-hosted setup, see **[docs/deploy.md](docs/deploy.md)**: the `Dockerfile`, the `docker-compose.yml` with the full
-Supabase stack, the variables, and the CI workflows that test-build the image.
+Together runs on Vercel with a hosted Supabase project. See **[docs/deploy.md](docs/deploy.md)** for the variables,
+the CI workflows and how migrations reach the database.
 
 On Vercel, the project deploys from this repository's `main` branch.
 

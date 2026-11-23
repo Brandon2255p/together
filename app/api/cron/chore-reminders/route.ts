@@ -1,5 +1,5 @@
-// The daily chore reminder: pushes "due today" to everyone's devices. Called by a scheduler (Vercel Cron, or a
-// Coolify scheduled task) with `Authorization: Bearer $CRON_SECRET`. Public in lib/supabase/proxy.ts; the secret
+// The daily chore reminder: pushes "due today" to everyone's devices. Called by Vercel Cron
+// (vercel.json) with `Authorization: Bearer $CRON_SECRET`. Public in lib/supabase/proxy.ts; the secret
 // is the lock.
 import { jobsBackend } from "@/lib/backend/jobs";
 import { choreReminderMessage } from "@/lib/push/message";

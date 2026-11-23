@@ -133,7 +133,7 @@ fetched fresh, not stored. So:
 
 **Env**
 
-- `GOOGLE_MAPS_API_KEY` is server-only. It never gets a `NEXT_PUBLIC_` prefix, and it goes in Coolify and the README's
+- `GOOGLE_MAPS_API_KEY` is server-only. It never gets a `NEXT_PUBLIC_` prefix, and it goes in Vercel and the README's
   env table.
 - Restrict the key to the Places API (New) and to the server's IP.
 - The stub backend returns canned autocomplete and details for "Kloof", "Nobu" and so on, so the flow works offline
@@ -187,7 +187,7 @@ fetched fresh, not stored. So:
 2. Backend interface, stub seed (a second and third Together for Brandon), Supabase implementation.
 3. Screens 14–16 (members, invite), then 18 and 17 (switcher pill, then the bubbles).
 4. Schema: `google_place_id`, address and location columns, then `just create-migration google_places`.
-   Separately, add `GOOGLE_MAPS_API_KEY` to the env docs and Coolify.
+   Separately, add `GOOGLE_MAPS_API_KEY` to the env docs and Vercel.
 5. `lib/google/places.ts` and the stub, then screens 21a–b (search and preview), 21c (by hand), 23 (detail), 22
    (edit), 24 (log a visit), then 19–20 (filter and sort).
 
