@@ -88,7 +88,7 @@ jobs:
         run: supabase db start
       - name: Every migration is recorded
         run: |
-          applied=$(supabase migration list | jq '[.migrations[] | select(.local == .remote)] | length')
+          applied=$(supabase migration list --output-format json | jq '[.migrations[] | select(.local == .remote)] | length')
           files=$(ls supabase/migrations/*.sql | wc -l)
           echo "applied $applied of $files"
           test "$applied" -eq "$files"
