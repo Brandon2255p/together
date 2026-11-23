@@ -26,4 +26,14 @@ export class StubBrowserService implements BrowserBackendService {
     console.info("[stub] watchTogether: no live changes on the stub");
     return () => undefined;
   }
+
+  /** the stub's bucket lives on the dev server: /api/stub/storage keeps the encrypted bytes in memory */
+  async uploadFileObject({ path, token, body }: { path: string; token: string; body: Blob }) {
+    const response = await fetch(`/api/stub/storage?path=${encodeURIComponent(path)}`, {
+      method: "PUT",
+      headers: { "x-upload-token": token, "content-type": "application/octet-stream" },
+      body,
+    });
+    return { error: response.ok ? null : { message: "The file didn't upload. Try again." } };
+  }
 }

@@ -30,10 +30,20 @@ import type {
   Together,
   TogetherSummary,
   WishItem,
+  Documents,
+  DuplicateMatch,
+  FileFolder,
+  FilesKey,
+  Hue,
+  NewUpload,
+  SignedFileUrl,
+  StartedUpload,
+  StorageUsage,
 } from "@/lib/models";
 import { stubAutocomplete, stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
 import { BRANDON, blankState, type StubChallenge } from "@/lib/backend/services/stub/seed";
 import { state, world } from "@/lib/backend/services/stub/state";
+import { duplicateMatches, filesOf, newRow, normaliseTags, objectPath, QUOTA_BYTES, signUpload, stubStorage, toSharedFile, type StubFiles } from "@/lib/backend/services/stub/files";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis): every
 // Together it knows, and which one is open. state() is the open Together's data.
@@ -721,6 +731,164 @@ export class StubServerService implements ServerBackendService {
     await wait();
     log("deleteChallenge", { id: challengeId });
     state().challenges = state().challenges.filter((c) => c.id !== challengeId);
+    return done;
+  }
+
+  // ---- Files ----------------------------------------------------------------------------------------------------------
+
+  async filesKeys() {
+    await wait();
+    log("filesKeys");
+    const files = await this.myFiles();
+    if (!files) return fail<FilesKey[]>(NO_TOGETHER);
+    return ok([{ version: 1, key: files.key, active: true }]);
+  }
+
+  async storageUsage() {
+    await wait();
+    log("storageUsage");
+    const files = await this.myFiles();
+    if (!files) return fail<StorageUsage>(NO_TOGETHER);
+    const part = (keep: (f: StubFiles["files"][number]) => boolean) => {
+      const rows = files.files.filter((f) => f.status === "ready" && keep(f));
+      return { count: rows.length, bytes: rows.reduce((sum, f) => sum + f.storedBytes, 0) };
+    };
+    return ok({
+      quotaBytes: QUOTA_BYTES,
+      usedBytes: files.files.reduce((sum, f) => sum + f.storedBytes, 0),
+      photos: part((f) => !f.deletedAt && f.kind === "photo"),
+      videos: part((f) => !f.deletedAt && f.kind === "video"),
+      documents: part((f) => !f.deletedAt && f.kind === "document"),
+      bin: part((f) => f.deletedAt !== null),
+    });
+  }
+
+  async getDocuments() {
+    await wait();
+    log("getDocuments");
+    const files = await this.myFiles();
+    if (!files) return fail<Documents>(NO_TOGETHER);
+    const shown = files.files.filter((f) => f.kind === "document" && f.status === "ready" && !f.deletedAt);
+    return ok({
+      folders: [...files.folders].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map(({ id, name, hue }) => ({ id, name, hue })),
+      files: shown.map(toSharedFile),
+    });
+  }
+
+  async findDuplicates({ macs }: { macs: string[] }) {
+    await wait();
+    log("findDuplicates", { count: macs.length });
+    const files = await this.myFiles();
+    const together = state().together;
+    if (!files || !together) return fail<DuplicateMatch[]>(NO_TOGETHER);
+    const names = Object.fromEntries([...together.members, ...together.formerMembers].map((m) => [m.id, m.name]));
+    return ok(duplicateMatches(files, macs, names));
+  }
+
+  async startUpload({ togetherId, ...upload }: { togetherId: string } & NewUpload) {
+    await wait();
+    log("startUpload", { name: upload.name, bytes: upload.storedBytes });
+    const files = await this.myFiles();
+    if (!files || state().together?.id !== togetherId) return fail<StartedUpload>(NO_TOGETHER);
+    if (files.files.some((f) => f.contentMac === upload.contentMac)) return ok<StartedUpload>({ duplicate: true });
+    if (upload.folderId && !files.folders.some((f) => f.id === upload.folderId)) return fail<StartedUpload>("That folder isn't there any more.");
+    const used = files.files.reduce((sum, f) => sum + f.storedBytes, 0);
+    if (used + upload.storedBytes > QUOTA_BYTES) return fail<StartedUpload>("Not enough space left in your Together for this file.");
+    files.files.unshift(newRow(togetherId, upload, ME));
+    const path = objectPath(togetherId, upload.id);
+    return ok<StartedUpload>({ duplicate: false, target: { path, token: signUpload(path) } });
+  }
+
+  async finishUpload({ id: fileId }: { id: string }) {
+    await wait();
+    log("finishUpload", { id: fileId });
+    const file = (await this.myFiles())?.files.find((f) => f.id === fileId);
+    if (!file || file.uploadedBy !== ME || file.status !== "uploading") return notDone("That upload isn't there any more.");
+    const bytes = stubStorage.get(file.originalPath);
+    if (!bytes || bytes.length > file.storedBytes) return notDone("The file didn't arrive whole. Try adding it again.");
+    file.status = "ready";
+    return done;
+  }
+
+  async renameFile({ id: fileId, name }: { id: string; name: string }) {
+    return this.editFile("renameFile", fileId, (f) => void (f.name = name));
+  }
+
+  async moveFile({ id: fileId, folderId }: { id: string; folderId: string | null }) {
+    const files = await this.myFiles();
+    if (folderId && !files?.folders.some((f) => f.id === folderId)) return notDone("That folder isn't there any more.");
+    return this.editFile("moveFile", fileId, (f) => void (f.folderId = folderId));
+  }
+
+  async setFileTags({ id: fileId, tags }: { id: string; tags: string[] }) {
+    return this.editFile("setFileTags", fileId, (f) => void (f.tags = normaliseTags(tags)));
+  }
+
+  async moveToBin({ id: fileId }: { id: string }) {
+    return this.editFile("moveToBin", fileId, (f) => void (f.deletedAt ??= new Date().toISOString()));
+  }
+
+  async restoreFile({ id: fileId }: { id: string }) {
+    const files = await this.myFiles();
+    return this.editFile("restoreFile", fileId, (f) => {
+      f.deletedAt = null;
+      // its folder may have been deleted while it was in the bin
+      if (f.folderId && !files?.folders.some((d) => d.id === f.folderId)) f.folderId = null;
+    });
+  }
+
+  async createFolder({ name, hue }: { name: string; hue: Hue }) {
+    await wait();
+    log("createFolder", { name, hue });
+    const files = await this.myFiles();
+    if (!files) return fail<FileFolder>(NO_TOGETHER);
+    if (files.folders.some((f) => f.name.trim().toLowerCase() === name.trim().toLowerCase())) return fail<FileFolder>("There's already a folder with that name.");
+    const folder = { id: crypto.randomUUID(), name, hue, createdAt: new Date().toISOString() };
+    files.folders.push(folder);
+    return ok<FileFolder>({ id: folder.id, name, hue });
+  }
+
+  async renameFolder({ id: folderId, name }: { id: string; name: string }) {
+    await wait();
+    log("renameFolder", { id: folderId, name });
+    const files = await this.myFiles();
+    const folder = files?.folders.find((f) => f.id === folderId);
+    if (!files || !folder) return notDone("That folder isn't there any more.");
+    if (files.folders.some((f) => f.id !== folderId && f.name.trim().toLowerCase() === name.trim().toLowerCase())) return notDone("There's already a folder with that name.");
+    folder.name = name;
+    return done;
+  }
+
+  async deleteFolder({ id: folderId }: { id: string }) {
+    await wait();
+    log("deleteFolder", { id: folderId });
+    const files = await this.myFiles();
+    if (!files) return notDone(NO_TOGETHER);
+    if (files.files.some((f) => f.folderId === folderId && !f.deletedAt)) return notDone("Only an empty folder can be deleted. Move or bin its files first.");
+    files.folders = files.folders.filter((f) => f.id !== folderId);
+    for (const f of files.files) if (f.folderId === folderId) f.folderId = null;
+    return done;
+  }
+
+  async signedFileUrls({ paths }: { paths: string[] }) {
+    await wait();
+    log("signedFileUrls", { count: paths.length });
+    const togetherId = state().together?.id;
+    if (!togetherId) return fail<SignedFileUrl[]>(NO_TOGETHER);
+    return ok(paths.filter((p) => p.startsWith(`${togetherId}/`)).map((path) => ({ path, url: `/api/stub/storage?path=${encodeURIComponent(path)}` })));
+  }
+
+  private async myFiles(): Promise<StubFiles | null> {
+    const togetherId = state().together?.id;
+    return togetherId ? filesOf(togetherId) : null;
+  }
+
+  private async editFile(action: string, fileId: string, change: (f: StubFiles["files"][number]) => void): Promise<MutationResult> {
+    await wait();
+    log(action, { id: fileId });
+    const file = (await this.myFiles())?.files.find((f) => f.id === fileId && f.status === "ready");
+    if (!file) return notDone("That file isn't there any more.");
+    change(file);
     return done;
   }
 }

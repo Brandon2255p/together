@@ -29,4 +29,10 @@ export class RealBrowserService implements BrowserBackendService {
       .subscribe();
     return () => void sb.removeChannel(channel);
   }
+
+  /** a signed upload into the private "files" bucket; the bytes go straight to Storage, not through Vercel */
+  async uploadFileObject({ path, token, body }: { path: string; token: string; body: Blob }) {
+    const { error } = await createClient().storage.from("files").uploadToSignedUrl(path, token, body, { contentType: "application/octet-stream" });
+    return { error: error ? { message: error.message } : null };
+  }
 }

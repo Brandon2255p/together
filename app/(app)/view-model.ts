@@ -46,8 +46,11 @@ function useLiveTogether() {
   }, [router]);
 }
 
-/** full-screen forms that hide the tab bar: /places/new, /places/new/manual, /places/[id]/edit */
-const FORMS = [/^\/places\/new(\/|$)/, /^\/places\/[^/]+\/edit$/];
+/**
+ * Screens that hide the tab bar: full-screen forms (/places/new, /places/new/manual, /places/[id]/edit), and Gallery
+ * and Files, which are pushed from Home's shortcuts and go back with "‹ Home".
+ */
+const FORMS = [/^\/places\/new(\/|$)/, /^\/places\/[^/]+\/edit$/, /^\/(files|gallery)(\/|$)/];
 
 /** which tab the URL is under (routing stays out of the components) */
 export function useAppShellViewModel() {
