@@ -31,6 +31,8 @@ const LINKS = {
   togethers: "/togethers" as Route,
   profile: "/profile" as Route,
   challenges: "/challenges" as Route,
+  gallery: "/gallery" as Route,
+  files: "/files" as Route,
 };
 
 export function useHomeViewModel(data: HomeViewData) {
