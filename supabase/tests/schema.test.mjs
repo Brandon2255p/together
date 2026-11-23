@@ -2,6 +2,8 @@
 // checks row-level security and the RPC functions acting as different people. No Docker needed.
 //   pnpm test:db
 import { PGlite } from "@electric-sql/pglite";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import { randomUUID } from "node:crypto";
 import { globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,7 +12,7 @@ const config = readFileSync(join(supabaseDir, "config.toml"), "utf8");
 const patterns = [...config.match(/schema_paths = \[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 const files = patterns.flatMap((p) => globSync(p, { cwd: supabaseDir }).sort());
 const migration = files.map((f) => `-- ${f}\n${readFileSync(join(supabaseDir, f), "utf8")}`).join("\n");
-const db = new PGlite();
+const db = new PGlite({ extensions: { pgcrypto } });
 
 await db.exec(`
   create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
@@ -22,6 +24,27 @@ await db.exec(`
   grant usage on schema public to authenticated, anon;
   alter default privileges in schema public grant all on tables to authenticated, anon;
   create publication supabase_realtime;
+  -- pgcrypto lives in the extensions schema on Supabase
+  create schema extensions; create extension pgcrypto schema extensions;
+  -- Supabase Vault, minus the encryption: secrets the app's roles can't read, and a view only definers see
+  create schema vault;
+  create table vault.secrets (id uuid primary key default gen_random_uuid(), name text unique, description text, secret text not null);
+  create function vault.create_secret(new_secret text, new_name text default null, new_description text default '', new_key_id uuid default null)
+    returns uuid language sql as $$ insert into vault.secrets (secret, name, description) values (new_secret, new_name, new_description) returning id $$;
+  create view vault.decrypted_secrets as select id, name, description, secret, secret as decrypted_secret from vault.secrets;
+  -- Supabase Storage: buckets and objects with RLS, and the foldername() helper policies use
+  create schema storage;
+  create table storage.buckets (id text primary key, public boolean not null default false);
+  create table storage.objects (
+    id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets, name text not null,
+    owner uuid default auth.uid(), metadata jsonb, created_at timestamptz default now(), unique (bucket_id, name)
+  );
+  alter table storage.objects enable row level security;
+  create function storage.foldername(name text) returns text[] language sql immutable as
+    $$ select (string_to_array(name, '/'))[1:cardinality(string_to_array(name, '/')) - 1] $$;
+  grant usage on schema storage to authenticated, anon;
+  grant all on storage.objects to authenticated;
+  insert into storage.buckets (id) values ('files');
 `);
 await db.exec(migration);
 console.log(`✓ ${files.length} schema files applied`);
@@ -388,6 +411,139 @@ await as("adele", "select public.v1_switch_together($1)", [(await one("brandon",
 check("reminders cover a Together you're in", (await adeleTitles()).includes("Fix the gate"));
 await as("adele", "select public.v1_leave_together()");
 check("…but not one you've left", !(await adeleTitles()).includes("Fix the gate"));
+
+// files: keys, uploads, quota, duplicates, bin, folders, search
+Object.assign(U, {
+  gina: "00000000-0000-0000-0000-000000000001",
+  hal: "00000000-0000-0000-0000-000000000002",
+  ivy: "00000000-0000-0000-0000-000000000003",
+});
+for (const name of ["gina", "hal", "ivy"]) await db.query(`insert into auth.users (id, email) values ($1, $2)`, [U[name], `${name}@example.com`]);
+const tG = (await one("gina", "select public.v2_create_together('Gina & Hal') id")).id;
+await as("hal", "select public.v2_join_together($1)", [(await one("gina", "select invite_code from public.togethers")).invite_code]);
+const tI = (await one("ivy", "select public.v2_create_together('Ivy') id")).id;
+
+const keysOf = (user) => rows(user, "select * from public.v1_files_keys()");
+const gKeys = await keysOf("gina");
+check("the first ask makes key version 1: 32 random bytes", gKeys.length === 1 && gKeys[0].version === 1 && gKeys[0].active && Buffer.from(gKeys[0].key, "base64").length === 32, JSON.stringify(gKeys));
+check("everyone in the Together gets the same key", (await keysOf("hal"))[0].key === gKeys[0].key && (await keysOf("gina")).length === 1);
+check("each Together has its own key", (await keysOf("ivy"))[0].key !== gKeys[0].key);
+check("the key is kept in Vault", (await db.query("select count(*)::int n from vault.secrets where secret = $1", [gKeys[0].key])).rows[0].n === 1);
+await fails("no keys without a Together", "fred", "select * from public.v1_files_keys()", [], /not in a Together/);
+check("members can't read together_keys directly", (await rows("gina", "select * from public.together_keys")).length === 0);
+await fails("members can't read Vault", "gina", "select * from vault.decrypted_secrets", [], /permission denied/);
+
+const mac = (n) => n.toString(16).padStart(64, "0");
+const paths = (t, id, kind) => [`${t}/${id}/original.bin`, kind === "document" ? null : `${t}/${id}/thumb.bin`, kind === "document" ? null : `${t}/${id}/preview.bin`];
+async function startUpload(user, { kind = "photo", n, stored = 1000, name = `file-${n}`, takenAt = "2026-11-03T10:00:00Z", folder = null, tags = [], together = tG }) {
+  const id = randomUUID();
+  const [o, th, pr] = paths(together, id, kind);
+  await as(user,
+    `insert into public.files (id, kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path, thumb_path, preview_path, taken_at, folder_id, tags)
+     values ($1, $2, $3, 'application/octet-stream', $4, $4, 1, $5, $6, $7, $8, $9, $10, $11)`,
+    [id, kind, name, stored, mac(n), o, th, pr, takenAt, folder, tags]);
+  return { id, paths: [o, th, pr].filter(Boolean) };
+}
+const putObject = (user, path, size) => as(user, "insert into storage.objects (bucket_id, name, metadata) values ('files', $1, $2)", [path, { size }]);
+async function upload(user, opts) {
+  const f = await startUpload(user, opts);
+  const each = Math.floor((opts.stored ?? 1000) / f.paths.length);
+  for (const p of f.paths) await putObject(user, p, each);
+  await as(user, "select public.v1_finish_upload($1)", [f.id]);
+  return f.id;
+}
+
+// uploading
+const sunset = await startUpload("gina", { n: 1, stored: 900, name: "Sunset.heic" });
+await fails("can't finish before the objects are uploaded", "gina", "select public.v1_finish_upload($1)", [sunset.id], /missing/);
+await fails("someone else can't add objects to your upload", "hal", "insert into storage.objects (bucket_id, name, metadata) values ('files', $1, '{}')", [sunset.paths[0]], /row-level security/);
+await fails("objects outside an upload are refused", "gina", "insert into storage.objects (bucket_id, name, metadata) values ('files', $1, '{}')", [`${tG}/${randomUUID()}/original.bin`], /row-level security/);
+for (const p of sunset.paths) await putObject("gina", p, 300);
+await fails("Hal can't finish Gina's upload", "hal", "select public.v1_finish_upload($1)", [sunset.id], /isn't waiting/);
+const done = await one("gina", "select status, stored_bytes::int from public.v1_finish_upload($1)", [sunset.id]);
+check("finishing makes it ready with the real size", done.status === "ready" && done.stored_bytes === 900, JSON.stringify(done));
+const big = await startUpload("gina", { n: 2, stored: 300, kind: "document" });
+await putObject("gina", big.paths[0], 5000);
+await fails("objects bigger than declared are rejected", "gina", "select public.v1_finish_upload($1)", [big.id], /doesn't match/);
+check("Hal reads the Together's objects", (await rows("hal", "select name from storage.objects where name like $1", [`${tG}/%`])).length >= 3);
+check("Ivy can't read them", (await rows("ivy", "select name from storage.objects")).length === 0);
+check("Ivy can't see the files", (await rows("ivy", "select * from public.files")).length === 0);
+await fails("can't upload straight to ready", "gina", "insert into public.files (kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path, status) values ('document', 'x', 'x', 1, 1, 1, $1, 'x', 'ready')", [mac(3)], /row-level security/);
+const otherId = randomUUID();
+await fails("paths have to be the file's own", "gina", "insert into public.files (id, kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path) values ($1, 'document', 'x', 'x', 1, 1, 1, $2, $3)", [otherId, mac(4), `${tI}/${otherId}/original.bin`], /check constraint/);
+await fails("photos don't take tags", "gina", "insert into public.files (id, kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path, tags) values ($1, 'photo', 'x', 'x', 1, 1, 1, $2, $3, '{car}')", [otherId, mac(5), `${tG}/${otherId}/original.bin`], /check constraint/);
+await as("gina", "update storage.objects set metadata = '{}' where name = $1", [sunset.paths[0]]);
+await as("gina", "delete from storage.objects where name = $1", [sunset.paths[0]]);
+check("objects can't be changed or deleted by members", (await db.query("select metadata from storage.objects where name = $1", [sunset.paths[0]])).rows[0]?.metadata?.size === 300);
+
+// duplicates
+await fails("the same file twice is refused", "hal", "insert into public.files (id, kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path) values ($1, 'photo', 'x', 'x', 1, 1, 1, $2, $3)", [otherId, mac(1), `${tG}/${otherId}/original.bin`], /duplicate key/);
+const dup = await rows("hal", "select * from public.v1_find_duplicates($1)", [[mac(1), mac(99)]]);
+check("duplicates say who added them", dup.length === 1 && dup[0].uploaded_by_name === "gina" && dup[0].in_bin === false, JSON.stringify(dup));
+check("Ivy's Together doesn't see Gina's duplicates", (await rows("ivy", "select * from public.v1_find_duplicates($1)", [[mac(1)]])).length === 0);
+await upload("ivy", { n: 1, together: tI, stored: 10 });
+check("…and can add the same file to her own", (await rows("ivy", "select * from public.v1_find_duplicates($1)", [[mac(1)]])).length === 1);
+
+// quota
+await fails("members can't raise the quota", "gina", "update public.togethers set storage_quota_bytes = 1e12 where id = $1", [tG], /can't be changed/);
+await as("hal", "update public.togethers set name = 'G & H' where id = $1", [tG]);
+check("…but can still rename", (await db.query("select name from public.togethers where id = $1", [tG])).rows[0].name === "G & H");
+check("the quota is 50 GB", Number((await one("gina", "select public.v1_storage_usage() u")).u.quota_bytes) === 50 * 1024 ** 3);
+await db.query("update public.togethers set storage_quota_bytes = 3000 where id = $1", [tG]);
+await fails("an upload that doesn't fit is refused", "hal", "insert into public.files (id, kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path) values ($1, 'video', 'x', 'x', 1, 2000, 1, $2, $3)", [otherId, mac(6), `${tG}/${otherId}/original.bin`], /Not enough space/);
+const vid = await upload("hal", { n: 7, kind: "video", stored: 600, name: "Beach.mov", takenAt: "2025-12-31T23:30:00Z" });
+
+// editing, the bin and folders
+await fails("what was uploaded can't change", "hal", "update public.files set stored_bytes = 1 where id = $1", [sunset.id], /Only the name/);
+await fails("members can't mark a file ready", "gina", "update public.files set status = 'ready' where id = $1", [big.id], /Only the name/);
+const { id: car } = await one("gina", "insert into public.file_folders (name, hue) values ('Car', 'partner') returning id");
+await fails("folder names are unique", "hal", "insert into public.file_folders (name) values (' car ')", [], /duplicate key/);
+const disc = await upload("gina", { n: 8, kind: "document", stored: 200, name: "Licence disc 2026.pdf", folder: car, tags: [" Car", "car", "LICENCE", ""], takenAt: "2026-03-10T08:00:00Z" });
+check("tags are trimmed, lowercased and de-duplicated", (await one("hal", "select tags from public.files where id = $1", [disc])).tags.join() === "car,licence");
+await as("hal", "update public.files set name = 'Licence disc.pdf', tags = '{car,Disc}' where id = $1", [disc]);
+check("members rename and tag", (await one("gina", "select name, tags from public.files where id = $1", [disc])).tags.join() === "car,disc");
+await fails("a folder with files can't be deleted", "hal", "delete from public.file_folders where id = $1", [car], /Move or bin/);
+await as("hal", "update public.files set deleted_at = '2000-01-01' where id = $1", [disc]);
+const binned = await one("gina", "select deleted_at, deleted_by from public.files where id = $1", [disc]);
+check("the bin records who and now, not what the app sent", binned.deleted_by === U.hal && Date.now() - binned.deleted_at.getTime() < 60_000, JSON.stringify(binned));
+await as("gina", "delete from public.file_folders where id = $1", [car]);
+check("…once its files are binned, a folder can go, and they lose it", (await one("gina", "select folder_id from public.files where id = $1", [disc])).folder_id === null);
+await as("gina", "delete from public.files where id = $1", [disc]);
+check("members can't hard-delete", (await db.query("select count(*)::int n from public.files where id = $1", [disc])).rows[0].n === 1);
+const dupBin = await rows("gina", "select in_bin from public.v1_find_duplicates($1)", [[mac(8)]]);
+check("a duplicate in the bin says so", dupBin[0]?.in_bin === true);
+
+const usage = (await one("gina", "select public.v1_storage_usage() u")).u;
+check(
+  "usage splits photos, videos, documents and bin, and counts unfinished uploads",
+  usage.photos.count === 1 && usage.photos.bytes === 900 && usage.videos.count === 1 && usage.bin.count === 1 && usage.bin.bytes === 200 && usage.documents.count === 0 && usage.used_bytes === 900 + 300 + 600 + 200,
+  JSON.stringify(usage),
+);
+await as("gina", "update public.files set deleted_at = null where id = $1", [disc]);
+check("restoring clears the bin", (await one("hal", "select deleted_at, deleted_by from public.files where id = $1", [disc])).deleted_by === null);
+
+// search
+const search = async (user, q, kinds = null, year = null, month = null) =>
+  (await rows(user, "select name from public.v1_search_files($1, $2, $3, $4)", [q, kinds && `{${kinds.join()}}`, year, month])).map((r) => r.name);
+check("search matches names", (await search("gina", "sunset")).join() === "Sunset.heic");
+check("…tags", (await search("gina", "disc")).join() === "Licence disc.pdf");
+check("…who added it", (await search("gina", "hal")).join() === "Beach.mov");
+check("…every word has to match", (await search("gina", "licence beach")).length === 0);
+check("a wildcard is just a character", (await search("gina", "%")).length === 0);
+check("kinds narrow it", (await search("gina", null, ["photo", "video"])).sort().join() === "Beach.mov,Sunset.heic");
+check("years use the Together's time zone (31 Dec 23:30 UTC is 2026 in Joburg)", (await search("gina", null, null, 2026, 1)).join() === "Beach.mov");
+check("months narrow a year", (await search("gina", null, null, 2026, 3)).join() === "Licence disc.pdf");
+await fails("a month needs a year", "gina", "select * from public.v1_search_files(null, null, null, 3)", [], /year before a month/);
+check("unfinished uploads stay out of search", !(await search("gina", null)).includes(`file-2`));
+const months = await rows("gina", "select * from public.v1_file_months(null)");
+check("months count what's there", months.length === 3 && months[0].year === 2026 && months[0].month === 11, JSON.stringify(months));
+check("Ivy's search doesn't reach Gina's files", (await search("ivy", "sunset")).length === 0);
+
+// emptying the bin
+await as("gina", "update public.files set deleted_at = now() where id = $1", [vid]);
+check("emptying the bin counts what was in it", (await one("hal", "select public.v1_empty_bin() n")).n === 1);
+check("…and marks it for the purge", (await db.query("select deleted_at < now() - interval '29 days' old from public.files where id = $1", [vid])).rows[0].old === true);
+check("realtime covers files and folders", (await db.query("select count(*)::int n from pg_publication_tables where pubname = 'supabase_realtime' and tablename in ('files', 'file_folders')")).rows[0].n === 2);
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);

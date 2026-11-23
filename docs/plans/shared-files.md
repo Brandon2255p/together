@@ -1,6 +1,7 @@
 # Plan: shared Gallery and Files (photos, videos and documents)
 
-> **Status: designed, not built.** The screens are in `design/Together.figcraft` (open it in FigCraft), on the
+> **Status: steps 1 (Home shortcuts) and 2 (schema, keys, quota, Storage, `lib/files/crypto.ts`) are built; the
+> rest is designed, not built.** The screens are in `design/Together.figcraft` (open it in FigCraft), on the
 > **📱 Screens** page: the new Home is **05 Home**, and the rest are under **08 — Files: photos, videos & documents**
 > (36–45).
 
@@ -90,9 +91,10 @@ create table public.together_keys (
 create unique index together_keys_active_idx on public.together_keys (together_id) where retired_at is null;
 ```
 
-- **Creating keys:** an `after insert` trigger on `togethers` (security definer) generates 32 random bytes
-  (`extensions.gen_random_bytes`) and stores them with `vault.create_secret`. It then inserts version 1. The migration
-  backfills keys for existing Togethers the same way.
+- **Creating keys:** the first `v1_files_keys()` call for a Together generates 32 random bytes
+  (`extensions.gen_random_bytes`), stores them with `vault.create_secret` and inserts version 1, under an advisory lock
+  so two members opening the app at once make one key. Existing Togethers get theirs the same way, so the migration
+  needs no backfill.
 - **Access:** RLS is on and there are no policies, so nobody reads the table directly. Members get their keys through
   `v1_files_keys()` below.
 - **Why Vault:** the key is encrypted inside the database, and Vault's root key is managed by Supabase outside it. A
@@ -145,7 +147,8 @@ Indexes:
 - `(together_id, kind, taken_at desc, id) where status = 'ready' and deleted_at is null` serves the gallery's keyset
   pages.
 - `(together_id, folder_id, created_at desc) where status = 'ready' and deleted_at is null` serves the drive.
-- A GIN index on `tags`, and a `pg_trgm` GIN index on `lower(name)`, for search.
+- A GIN index on `tags`. Names are matched with `like` within one Together, which is small enough not to need a
+  trigram index.
 
 Quota check: a `before insert` trigger locks the Together's row (`select … for update`). It sums `stored_bytes` over
 all its files (uploading, ready and binned) and raises `storage_full` if the new row doesn't fit. The lock serialises
@@ -185,8 +188,9 @@ Vercel only ever see ciphertext. This also keeps big files out of the server, as
 - **Per-file key:** HKDF-SHA256(Together key, salt = file id, info = `"together/file/v1"`) gives each file its own
   AES-256-GCM key. Nonces then never repeat across files, and a single file key reveals nothing about the others.
 - **Chunked format** (`lib/files/crypto.ts`), so a 1 GB video never sits in memory twice and can later stream:
-  - A 16-byte header: magic `TGF1`, format version, key version, and chunk size (4 MiB).
-  - Then each chunk as AES-GCM ciphertext and tag. The nonce is a random 8-byte prefix plus the chunk index. The AAD is
+  - A 24-byte header: magic `TGF1`, format version, key version, chunk size (4 MiB), and a random 8-byte nonce
+    prefix.
+  - Then each chunk as AES-GCM ciphertext and tag. The nonce is the header's prefix plus the chunk index. The AAD is
     the file id, the chunk index, and a "last chunk" flag, so chunks can't be reordered, swapped between files or
     truncated.
   - Overhead is 16 bytes per 4 MiB, which is negligible for the quota.
@@ -305,8 +309,8 @@ Supabase Image Transformations can't help here, because the stored objects are e
   and Files with documents; the All chip widens the search to everything.
 - Year and month are the only date refinements; the When sheet has no day picker. The date chip shows "2026" or
   "Nov 2026" with ✕ to clear.
-- Matching uses `ilike` with the trigram index. Each Together has at most a few thousand items, so full-text ranking
-  isn't worth it yet. File contents aren't searchable, since they're encrypted.
+- Matching uses `like` on lowercased text, within one Together (at most a few thousand items), so neither a trigram
+  index nor full-text ranking is worth it yet. File contents aren't searchable, since they're encrypted.
 
 ## Code (MVVM)
 

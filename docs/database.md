@@ -13,10 +13,12 @@ supabase/schemas/
 ├── internal/                  helpers other SQL calls; the app never does, so they aren't versioned
 ├── functions_v1/v1_<name>.sql the RPCs the app calls, one per file, named with their version
 ├── triggers/<name>.sql        trigger function + the trigger
-└── realtime.sql               tables published to Supabase Realtime
+├── realtime.sql               tables published to Supabase Realtime
+└── storage.sql                policies on storage.objects (the private "files" bucket is declared in config.toml)
 ```
 
-`schema_paths` in `supabase/config.toml` sets the load order: types, tables, internal, functions, triggers, realtime.
+`schema_paths` in `supabase/config.toml` sets the load order: types, tables, internal, functions, triggers, realtime,
+storage.
 
 ### Changing the schema
 
@@ -87,6 +89,9 @@ erDiagram
 | `wishes`, `wish_claims` | Wishes and who's secretly buying them | `WishItem` |
 | `goals`, `goal_owners` | Savings goals | `Goal` |
 | `calendar_feeds` | Each person's secret calendar feed token per Together. No policies: only the functions below touch it | `CalendarFeed` via `v1_calendar_feed()` |
+| `together_keys` | Which Vault secret holds each version of a Together's file encryption key. No policies: only `v1_files_keys()` reads it | (keys, in the browser) |
+| `file_folders` | One level of folders in Files | `FileFolder` |
+| `files` | Photos, videos and documents: name, kind, sizes, key version, content MAC, Storage paths, when taken, folder, tags, who added it, status, the bin | `SharedFile` |
 
 Money is stored in cents (`price_cents`, `saved_cents`, `target_cents`). The models use whole rands, so the
 Supabase service divides by 100.
@@ -144,8 +149,30 @@ Stricter rules sit on top:
 | `v1_calendar_feed_token(reset)` | Your calendar feed token for the current Together, made on first call; `reset` swaps it so the old link stops working |
 | `v1_calendar_feed(token)` | The feed route, with the publishable key (the token is the lock): the Together's name, time zone and plans from 90 days ago on, with place and who's going. Null for an unknown token or someone who left |
 | `v1_item_catalog()` | Your history plus "popular" names. A name counts as popular only when at least 3 Togethers have added it, so one couple's list never leaks. |
+| `v1_files_keys()` | The current Together's file encryption keys from Vault (every version, `active` marks the one for new uploads). Makes version 1 on the first call |
+| `v1_storage_usage()` | Quota and usage: total, photos, videos, documents and bin (counts and bytes as stored) |
+| `v1_finish_upload(id)` | The uploader only: checks the file's objects are in Storage and no bigger than declared, then makes it `ready` |
+| `v1_find_duplicates(macs)` | Which of these content MACs the Together already has, who added each and whether it's in the bin |
+| `v1_search_files(query, kinds, year, month, limit, before…)` | Words against name, tags, folder and uploader; year, or month of a year, in the Together's time zone; newest taken first |
+| `v1_file_months(kinds)` | Files per year and month taken |
+| `v1_empty_bin()` | Marks the bin's items as 30 days old so the next purge removes them |
 
 `togethers` has no insert policy, so you can only create or join one through these functions.
+
+**Shared files** (docs/plans/shared-files.md). The browser encrypts every photo, video and document with its
+Together's key (`lib/files/crypto.ts`) before uploading it straight to the private `files` bucket, at
+`<together_id>/<file_id>/original.bin` (plus `thumb.bin` and `preview.bin`). The keys are 32 random bytes in Supabase
+Vault, one set per Together, versioned so they can be rotated later. Other rules:
+
+- **Quota.** `togethers.storage_quota_bytes` (50 GB) is checked when a file row is inserted, with the Together's row
+  locked so concurrent uploads can't overshoot. Members can't change the quota.
+- **Uploads.** Storage only accepts objects for your own `uploading` rows, and `v1_finish_upload` checks their real
+  sizes.
+- **Duplicates.** A unique `(together_id, content_mac)` refuses duplicates, binned ones included.
+- **Deleting.** Members can bin and restore anything but can't hard-delete. Nobody but the service role can change or
+  delete Storage objects.
+
+The DB tests stand in for Vault, Storage and pgcrypto with small shims, since PGlite has none of them.
 
 **Places from Google.** Google's terms only let us store a place's id for good, and its coordinates for 30 days. So a
 place saved from a Maps link keeps `google_place_id` (one row per Google place per Together), `lat`/`lng` with
@@ -181,5 +208,7 @@ Then:
 1. In the Supabase dashboard, open Auth → Email templates and make the template send `{{ .Token }}`, so users get a
    6-digit code instead of a magic link.
 2. Set `USE_STUB_DATABASE=false` and `NEXT_PUBLIC_USE_STUB_DATABASE=false`.
-3. Generate types with `just gen-types`. This needs the local stack (`just db-start`).
-4. Implement `lib/backend/services/real/server.ts` against these tables.
+3. Create the `files` bucket with `supabase seed buckets --remote`. On the hosted project, also raise Storage's
+   global upload limit to at least 1 GB (Project settings → Storage); the bucket's own limit can't go above it.
+4. Generate types with `just gen-types`. This needs the local stack (`just db-start`).
+5. Implement `lib/backend/services/real/server.ts` against these tables.

@@ -11,3 +11,7 @@ create type public.hue as enum ('accent', 'partner', 'success', 'warning');
 create type public.challenge_cadence as enum ('daily', 'weekly', 'monthly');
 -- what became of a period: done, covered by a streak booster, or missed and let go
 create type public.challenge_outcome as enum ('done', 'boosted', 'reset');
+-- shared files: the gallery holds photos and videos, the drive holds documents
+create type public.file_kind as enum ('photo', 'video', 'document');
+-- a file row is inserted before its bytes are uploaded; v1_finish_upload makes it ready
+create type public.file_status as enum ('uploading', 'ready');

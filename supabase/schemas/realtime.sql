@@ -20,4 +20,6 @@ alter publication supabase_realtime add table
   public.challenge_periods,
   public.togethers,
   public.together_members,
-  public.profiles;
+  public.profiles,
+  public.file_folders,
+  public.files;

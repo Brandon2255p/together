@@ -69,6 +69,7 @@ schema_paths = [
   "./schemas/functions_v*/*.sql",
   "./schemas/triggers/*.sql",
   "./schemas/realtime.sql",
+  "./schemas/storage.sql",
 ]
 
 [db.seed]
@@ -123,7 +124,13 @@ port = 54424
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+file_size_limit = "1GiB"
+
+# Shared Gallery and Files: encrypted objects only (see supabase/schemas/storage.sql and docs/plans/shared-files.md).
+# Apply to a linked project with `supabase seed buckets --remote`.
+[storage.buckets.files]
+public = false
+file_size_limit = "1GiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
