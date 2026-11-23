@@ -3,9 +3,10 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
-import { ClockIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, UserRoundIcon } from "lucide-react";
+import { CalendarDaysIcon, ClockIcon, FolderIcon, ImagesIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, TargetIcon, UserRoundIcon } from "lucide-react";
 import type { Member, MemberTone } from "@/lib/models";
 import { Flame } from "@/components/challenges/art";
+import { ShortcutCard } from "@/components/home/shortcut-card";
 import { ManagePill } from "@/components/together/manage-pill";
 import { SwitcherPill } from "@/components/together/switcher-pill";
 import { AddChoreSheet, type AddChoreSheetProps } from "@/components/lists/add-chore-sheet";
@@ -32,7 +33,7 @@ export interface HomeScreenProps {
   choreSheet: AddChoreSheetProps;
   toBuy: number;
   wantToGo: number;
-  links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route; profile: Route; challenges: Route };
+  links: { chores: Route; shopping: Route; places: Route; calendar: Route; together: Route; togethers: Route; profile: Route; challenges: Route; gallery: Route; files: Route };
   error: string | null;
 }
 
@@ -105,6 +106,14 @@ export function HomeScreen(props: HomeScreenProps) {
       </RevealItem>
 
       <RevealItem className="flex flex-col gap-3">
+        <SectionHeader title="At a glance" />
+        <div className="flex gap-3">
+          <Tile href={links.shopping} icon={<ShoppingBagIcon aria-hidden />} tone="accent" count={toBuy} label="to buy" />
+          <Tile href={links.places} icon={<MapPinIcon aria-hidden />} tone="partner" count={wantToGo} label="places to try" />
+        </div>
+      </RevealItem>
+
+      <RevealItem className="flex flex-col gap-3">
         <SectionHeader title="Due today" action={<Link href={links.chores}>See all</Link>} />
         <InlineError>{error}</InlineError>
         {dueToday.length ? (
@@ -125,13 +134,15 @@ export function HomeScreen(props: HomeScreenProps) {
         )}
       </RevealItem>
 
-      <RevealItem className="flex flex-col gap-3">
-        <SectionHeader title="At a glance" />
-        <div className="flex gap-3">
-          <Tile href={links.shopping} icon={<ShoppingBagIcon aria-hidden />} tone="accent" count={toBuy} label="to buy" />
-          <Tile href={links.places} icon={<MapPinIcon aria-hidden />} tone="partner" count={wantToGo} label="places to try" />
-        </div>
+      <RevealItem>
+        <nav aria-label="Go to" className="flex gap-2.5">
+          <ShortcutCard href={links.calendar} icon={<CalendarDaysIcon aria-hidden />} tone="accent" label="Calendar" />
+          <ShortcutCard href={links.challenges} icon={<TargetIcon aria-hidden />} tone="warning" label="Challenges" />
+          <ShortcutCard href={links.gallery} icon={<ImagesIcon aria-hidden />} tone="partner" label="Gallery" />
+          <ShortcutCard href={links.files} icon={<FolderIcon aria-hidden />} tone="success" label="Files" />
+        </nav>
       </RevealItem>
+
       <AddChoreSheet {...choreSheet} />
     </Reveal>
   );
