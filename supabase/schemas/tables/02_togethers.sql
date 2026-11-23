@@ -11,6 +11,8 @@ create table public.togethers (
   invite_expires_at timestamptz not null default now() + interval '48 hours',
   -- "today", due dates and recurring chores are worked out in this zone
   time_zone text not null default 'Africa/Johannesburg',
+  -- what its Gallery and Files may store, in bytes (50 GB). Members can't change it: triggers/protect_storage_quota.sql
+  storage_quota_bytes bigint not null default 53687091200 check (storage_quota_bytes > 0),
   created_at timestamptz not null default now()
 );
 
