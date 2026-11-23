@@ -1,4 +1,4 @@
-// Liveness check for Docker and Coolify. Public (see lib/supabase/proxy.ts), no IO.
+// Liveness check (CI's smoke test, uptime monitors). Public (see lib/supabase/proxy.ts), no IO.
 export const dynamic = "force-dynamic";
 
 export function GET() {

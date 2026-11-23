@@ -42,3 +42,53 @@ jobs:
         run: pnpm test
       - name: Database tests (supabase/schemas on PGlite)
         run: pnpm test:db
+
+  build:
+    name: Build & smoke test
+    runs-on: ubuntu-latest
+    env:
+      # the stub backend, so the app runs without a database
+      USE_STUB_DATABASE: "true"
+      NEXT_PUBLIC_USE_STUB_DATABASE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Start
+        run: |
+          pnpm start > /tmp/next.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://localhost:3000/api/health && exit 0; sleep 1; done
+          cat /tmp/next.log
+          exit 1
+      - name: Smoke test
+        run: |
+          for path in /sign-in /home /design-system /sw.js /manifest.webmanifest; do
+            curl -fsS -o /dev/null -w "$path %{http_code}\n" "http://localhost:3000$path"
+          done
+      - name: Logs
+        if: always()
+        run: cat /tmp/next.log || true
+
+  migrate:
+    name: Migrations apply to Supabase Postgres
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # the same CLI version migrate.yml pushes to the hosted project with
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.0.0
+      - name: Apply every migration
+        # starts Postgres (major_version in supabase/config.toml) and applies supabase/migrations in order
+        run: supabase db start
+      - name: Every migration is recorded
+        run: |
+          applied=$(supabase migration list --output-format json | jq '[.migrations[] | select(.local == .remote)] | length')
+          files=$(ls supabase/migrations/*.sql | wc -l)
+          echo "applied $applied of $files"
+          test "$applied" -eq "$files"
