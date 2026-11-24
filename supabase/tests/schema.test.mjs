@@ -492,6 +492,44 @@ try {
   await db.exec("reset role");
 }
 
+// uploads that don't finish leave nothing behind (each row made here is gone again, so the usage numbers below hold)
+const pathsOf = (r) => r.map((x) => Object.values(x)[0]).sort();
+const age = (id, interval) => db.query(`update public.files set created_at = now() - interval '${interval}' where id = $1`, [id]);
+const exists = async (id) => (await db.query("select 1 from public.files where id = $1", [id])).rows.length === 1;
+const broken = await startUpload("gina", { n: 60 });
+check("someone else can't abort your upload", (await rows("hal", "select * from public.v1_abort_upload($1)", [broken.id])).length === 0 && (await exists(broken.id)));
+const aborted = pathsOf(await rows("gina", "select * from public.v1_abort_upload($1)", [broken.id]));
+check("aborting drops the row and hands back its objects", !(await exists(broken.id)) && JSON.stringify(aborted) === JSON.stringify([...broken.paths].sort()), JSON.stringify(aborted));
+check("aborting twice does nothing", (await rows("gina", "select * from public.v1_abort_upload($1)", [broken.id])).length === 0);
+check("a finished file can't be aborted", (await rows("ivy", "select * from public.v1_abort_upload($1)", [s3.id])).length === 0 && (await exists(s3.id)));
+
+const stuck = await startUpload("gina", { n: 61 });
+check("someone else's fresh upload stays in the way (it may still be sending)", (await rows("hal", "select * from public.v1_release_stuck_upload($1)", [mac(61)])).length === 0 && (await exists(stuck.id)));
+await age(stuck.id, "30 minutes");
+const released = pathsOf(await rows("hal", "select * from public.v1_release_stuck_upload($1)", [mac(61)]));
+check("…but once its URLs have died, anyone adding the file clears it", !(await exists(stuck.id)) && released.length === 3, JSON.stringify(released));
+const ownStuck = await startUpload("gina", { n: 62 });
+check("your own unfinished upload clears straight away", (await rows("gina", "select * from public.v1_release_stuck_upload($1)", [mac(62)])).length === 3 && !(await exists(ownStuck.id)));
+check("a finished copy is never cleared", (await rows("ivy", "select * from public.v1_release_stuck_upload($1)", [mac(50)])).length === 0 && (await exists(s3.id)));
+await age(sunset.id, "2 days");
+check("…however old", (await rows("hal", "select * from public.v1_release_stuck_upload($1)", [mac(1)])).length === 0 && (await exists(sunset.id)));
+check("Ivy can't clear Gina's Together's uploads", (await rows("ivy", "select * from public.v1_release_stuck_upload($1)", [mac(2)])).length === 0);
+
+const abandoned = await startUpload("gina", { n: 63 });
+const sending = await startUpload("gina", { n: 64 });
+await age(abandoned.id, "2 hours");
+await fails("members can't run the sweep", "gina", "select * from public.v1_sweep_stale_uploads()", [], /permission denied/);
+await db.exec("set role service_role");
+let swept;
+try {
+  swept = pathsOf((await db.query("select * from public.v1_sweep_stale_uploads()")).rows);
+} finally {
+  await db.exec("reset role");
+}
+check("the sweep deletes uploads left an hour on, with their objects", !(await exists(abandoned.id)) && JSON.stringify(swept) === JSON.stringify([...abandoned.paths].sort()), JSON.stringify(swept));
+check("…and leaves uploads still going, and finished files", (await exists(sending.id)) && (await exists(sunset.id)));
+await as("gina", "select * from public.v1_abort_upload($1)", [sending.id]);
+
 // duplicates
 await fails("the same file twice is refused", "hal", "insert into public.files (id, kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path) values ($1, 'photo', 'x', 'x', 1, 1, 1, $2, $3)", [otherId, mac(1), `${tG}/${otherId}/original.bin`], /duplicate key/);
 const dup = await rows("hal", "select * from public.v1_find_duplicates($1)", [[mac(1), mac(99)]]);

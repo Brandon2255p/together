@@ -1,5 +1,5 @@
 import "server-only";
-import { GetObjectCommand, HeadObjectCommand, S3Client, S3ServiceException } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client, S3ServiceException } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { awsCredentialsProvider } from "@vercel/functions/oidc";
@@ -78,4 +78,29 @@ export async function objectSizes(paths: string[]): Promise<(number | null)[]> {
       }
     }),
   );
+}
+
+/** deletes these objects (missing ones are fine); throws if S3 refuses any */
+export async function deleteObjects(paths: string[]): Promise<void> {
+  if (!paths.length) return;
+  const { client, bucket } = s3();
+  // DeleteObjects takes up to 1000 keys a call
+  for (let i = 0; i < paths.length; i += 1000) {
+    const batch = paths.slice(i, i + 1000);
+    const result = await client.send(
+      new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true } }),
+    );
+    if (result.Errors?.length) throw new Error(`S3 kept ${result.Errors.length} object(s): ${result.Errors[0]?.Code ?? "unknown"}`);
+  }
+}
+
+/** every object in the bucket, a page at a time */
+export async function* listObjects(): AsyncGenerator<{ path: string; modifiedAt: Date }[]> {
+  const { client, bucket } = s3();
+  let token: string | undefined;
+  do {
+    const page = await client.send(new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token }));
+    yield (page.Contents ?? []).flatMap((o) => (o.Key && o.LastModified ? [{ path: o.Key, modifiedAt: o.LastModified }] : []));
+    token = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (token);
 }

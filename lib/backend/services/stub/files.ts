@@ -68,7 +68,19 @@ export const stubStorage = {
     b.objects.set(path, bytes);
     return true;
   },
+  remove(paths: (string | null)[]) {
+    const b = bucket();
+    for (const p of paths) {
+      if (!p) continue;
+      b.objects.delete(p);
+      b.uploads.delete(p);
+    }
+  },
 };
+
+/** an unfinished upload that a fresh one of the same file may clear: yours, or anyone's past its URLs' 15 minutes */
+export const isStuckUpload = (row: StubFileRow, me: string, now = Date.now()) =>
+  row.status === "uploading" && (row.uploadedBy === me || now - Date.parse(row.createdAt) > 20 * 60 * 1000);
 
 export function duplicateMatches(files: StubFiles, macs: string[], names: Record<string, string>): DuplicateMatch[] {
   return files.files
