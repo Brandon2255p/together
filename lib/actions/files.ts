@@ -1,7 +1,7 @@
 "use server";
 
 import { serverBackend } from "@/lib/backend/server";
-import type { FileKind, Hue, NewUpload } from "@/lib/models";
+import type { FileKind, GalleryCursor, Hue, NewUpload } from "@/lib/models";
 
 // Shared files. The bytes never come through here: the browser encrypts them and sends them to Storage with the
 // signed upload startUpload returns.
@@ -14,6 +14,8 @@ const MAX_FILE_BYTES = 1024 ** 3;
 
 const fileName = (name: string) => name.trim().replace(/[\u0000-\u001f]/g, "").slice(0, 200);
 const folderName = (name: string) => name.trim().slice(0, 60);
+const dimension = (n: number | null) => (n !== null && Number.isInteger(n) && n > 0 && n <= 100_000 ? n : null);
+
 const cleanTags = (tags: string[]) => [...new Set(tags.map((t) => t.trim().toLowerCase()).filter((t) => t && t.length <= 30))].slice(0, 10);
 
 export async function filesKeys() {
@@ -28,6 +30,16 @@ export async function getDocuments() {
   return serverBackend.getDocuments();
 }
 
+/** a page of photos and videos, newest taken first; `before` is the last page's `next` */
+export async function getGallery(before: GalleryCursor | null = null, limit = 60) {
+  if (before && (!UUID.test(before.id) || Number.isNaN(Date.parse(before.takenAt)))) return { data: null, error: "That page doesn't look right." };
+  return serverBackend.getGallery({ before, limit: Math.min(Math.max(Math.trunc(limit) || 60, 1), 120) });
+}
+
+export async function galleryMonths() {
+  return serverBackend.galleryMonths();
+}
+
 export async function findDuplicates(macs: string[]) {
   const valid = [...new Set(macs.filter((m) => MAC.test(m)))].slice(0, 500);
   return serverBackend.findDuplicates({ macs: valid });
@@ -39,7 +51,23 @@ export async function startUpload(togetherId: string, upload: NewUpload) {
   if (!UUID.test(upload.id) || !MAC.test(upload.contentMac) || !KINDS.includes(upload.kind)) return { data: null, error: "That upload doesn't look right." };
   if (upload.sizeBytes > MAX_FILE_BYTES) return { data: null, error: `${name} is over 1 GB, the most one file can be.` };
   if (!(upload.storedBytes > 0) || upload.sizeBytes < 0) return { data: null, error: "That upload doesn't look right." };
-  return serverBackend.startUpload({ togetherId, ...upload, name, mimeType: upload.mimeType.slice(0, 200) || "application/octet-stream", tags: cleanTags(upload.tags) });
+  const media = upload.kind !== "document";
+  const takenAt = upload.takenAt && !Number.isNaN(Date.parse(upload.takenAt)) ? new Date(upload.takenAt).toISOString() : null;
+  return serverBackend.startUpload({
+    togetherId,
+    ...upload,
+    name,
+    mimeType: upload.mimeType.slice(0, 200) || "application/octet-stream",
+    // folders and tags are for documents; thumbs, previews and sizes for photos and videos
+    folderId: media ? null : upload.folderId,
+    tags: media ? [] : cleanTags(upload.tags),
+    takenAt,
+    hasThumb: media && upload.hasThumb,
+    hasPreview: media && upload.hasPreview,
+    width: media ? dimension(upload.width) : null,
+    height: media ? dimension(upload.height) : null,
+    durationMs: upload.kind === "video" && upload.durationMs !== null && Number.isInteger(upload.durationMs) && upload.durationMs >= 0 ? upload.durationMs : null,
+  });
 }
 
 export async function finishUpload(id: string) {

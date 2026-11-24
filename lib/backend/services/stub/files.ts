@@ -5,6 +5,7 @@ import { addDays, todayKey } from "@/lib/format";
 import { contentMac, encryptFile, importTogetherKey } from "@/lib/files/crypto";
 import type { DuplicateMatch, FileFolder, Hue, NewUpload, SharedFile } from "@/lib/models";
 import { ADELE, BRANDON } from "@/lib/backend/services/stub/seed";
+import { SAMPLE_CLIP_MP4, SAMPLE_CLIP_MS } from "@/lib/backend/services/stub/sample-clip";
 
 // The stub's shared files: per Together, a key, folders and file rows, plus an in-memory "bucket" of encrypted objects
 // that /api/stub/storage serves. Seed documents are really encrypted with the Together's key, so the stub exercises
@@ -47,7 +48,7 @@ export function filesOf(togetherId: string): Promise<StubFiles> {
 
 const empty = (): StubFiles => ({ key: randomBytes(32).toString("base64"), folders: [], files: [] });
 
-export const objectPath = (togetherId: string, fileId: string) => `${togetherId}/${fileId}/original.bin`;
+export const objectPath = (togetherId: string, fileId: string, part: "original" | "thumb" | "preview" = "original") => `${togetherId}/${fileId}/${part}.bin`;
 
 /** a signed upload: the path may then be written once with this token */
 export function signUpload(path: string): string {
@@ -97,6 +98,11 @@ export function newRow(togetherId: string, upload: NewUpload, by: string): StubF
     uploadedBy: by,
     createdAt: now,
     takenAt: upload.takenAt ?? now,
+    thumbPath: upload.hasThumb ? objectPath(togetherId, upload.id, "thumb") : null,
+    previewPath: upload.hasPreview ? objectPath(togetherId, upload.id, "preview") : null,
+    width: upload.width,
+    height: upload.height,
+    durationMs: upload.kind === "video" ? upload.durationMs : null,
     contentMac: upload.contentMac,
     status: "uploading",
     deletedAt: null,
@@ -105,8 +111,26 @@ export function newRow(togetherId: string, upload: NewUpload, by: string): StubF
 
 /** the row as the app sees it, without the stub's bookkeeping */
 export function toSharedFile(row: StubFileRow): SharedFile {
-  const { id, kind, name, mimeType, sizeBytes, storedBytes, keyVersion, originalPath, folderId, tags, uploadedBy, createdAt, takenAt } = row;
-  return { id, kind, name, mimeType, sizeBytes, storedBytes, keyVersion, originalPath, folderId, tags: [...tags], uploadedBy, createdAt, takenAt };
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    storedBytes: row.storedBytes,
+    keyVersion: row.keyVersion,
+    originalPath: row.originalPath,
+    folderId: row.folderId,
+    tags: [...row.tags],
+    uploadedBy: row.uploadedBy,
+    createdAt: row.createdAt,
+    takenAt: row.takenAt,
+    thumbPath: row.thumbPath,
+    previewPath: row.previewPath,
+    width: row.width,
+    height: row.height,
+    durationMs: row.durationMs,
+  };
 }
 
 /** as triggers/files_guard.sql does it */
@@ -139,8 +163,10 @@ function pdf(title: string): Uint8Array {
   return new TextEncoder().encode(out);
 }
 
-/** a plain coloured PNG, standing in for a phone photo of a card */
-function png(width: number, height: number, [r, g, b]: [number, number, number]): Uint8Array {
+type Rgb = [number, number, number];
+
+/** a PNG that fades from `top` to `bottom`, standing in for a photo (a plain colour when they're the same) */
+function png(width: number, height: number, top: Rgb, bottom: Rgb = top): Uint8Array {
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -163,8 +189,12 @@ function png(width: number, height: number, [r, g, b]: [number, number, number])
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
   header.set([8, 2, 0, 0, 0], 8);
-  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: width }, () => [r, g, b]).flat())]);
-  const pixels = deflateSync(Buffer.concat(Array.from({ length: height }, () => row)));
+  const rows = Array.from({ length: height }, (_, y) => {
+    const t = height > 1 ? y / (height - 1) : 0;
+    const colour = top.map((c, i) => Math.round(c + (bottom[i]! - c) * t));
+    return Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: width }, () => colour).flat())]);
+  });
+  const pixels = deflateSync(Buffer.concat(rows));
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", pixels), chunk("IEND", Buffer.alloc(0))]);
 }
 
@@ -193,31 +223,101 @@ async function seedBrandonAndAdele(togetherId: string): Promise<StubFiles> {
     { name: "Adele ID card.pdf", folderId: ids, tags: ["id"], by: ADELE.id, days: -150, bytes: pdf("ID card - Adele"), mime: "application/pdf" },
     { name: "Wifi and alarm codes.pdf", folderId: null, tags: ["house"], by: BRANDON.id, days: -200, bytes: pdf("Wifi and alarm codes"), mime: "application/pdf" },
   ];
-  for (const doc of docs) {
-    const id = randomUUID();
-    const plain = new Blob([doc.bytes as Uint8Array<ArrayBuffer>]);
-    const sealed = new Uint8Array(await (await encryptFile(plain, key, id)).arrayBuffer());
-    const path = objectPath(togetherId, id);
+  const seal = async (id: string, part: "original" | "thumb" | "preview", bytes: Uint8Array) => {
+    const sealed = new Uint8Array(await (await encryptFile(new Blob([bytes as Uint8Array<ArrayBuffer>]), key, id)).arrayBuffer());
+    const path = objectPath(togetherId, id, part);
     bucket().objects.set(path, sealed);
+    return { path, size: sealed.length };
+  };
+
+  const add = async (item: {
+    kind: SharedFile["kind"];
+    name: string;
+    mime: string;
+    bytes: Uint8Array;
+    by: string;
+    added: string;
+    taken: string;
+    folderId?: string | null;
+    tags?: string[];
+    thumb?: Uint8Array;
+    preview?: Uint8Array;
+    width?: number;
+    height?: number;
+    durationMs?: number;
+  }) => {
+    const id = randomUUID();
+    const original = await seal(id, "original", item.bytes);
+    const thumb = item.thumb ? await seal(id, "thumb", item.thumb) : null;
+    const preview = item.preview ? await seal(id, "preview", item.preview) : null;
     files.files.push({
       id,
-      kind: "document",
-      name: doc.name,
-      mimeType: doc.mime,
-      sizeBytes: doc.bytes.length,
-      storedBytes: sealed.length,
+      kind: item.kind,
+      name: item.name,
+      mimeType: item.mime,
+      sizeBytes: item.bytes.length,
+      storedBytes: original.size + (thumb?.size ?? 0) + (preview?.size ?? 0),
       keyVersion: 1,
-      originalPath: path,
-      folderId: doc.folderId,
-      tags: normaliseTags(doc.tags),
-      uploadedBy: doc.by,
-      createdAt: at(doc.days),
-      takenAt: at(doc.days),
-      contentMac: await contentMac(plain, key),
+      originalPath: original.path,
+      folderId: item.folderId ?? null,
+      tags: normaliseTags(item.tags ?? []),
+      uploadedBy: item.by,
+      createdAt: item.added,
+      takenAt: item.taken,
+      thumbPath: thumb?.path ?? null,
+      previewPath: preview?.path ?? null,
+      width: item.width ?? null,
+      height: item.height ?? null,
+      durationMs: item.durationMs ?? null,
+      contentMac: await contentMac(new Blob([item.bytes as Uint8Array<ArrayBuffer>]), key),
       status: "ready",
       deletedAt: null,
     });
+  };
+
+  for (const doc of docs) {
+    await add({ kind: "document", name: doc.name, mime: doc.mime, bytes: doc.bytes, by: doc.by, added: at(doc.days), taken: at(doc.days), folderId: doc.folderId, tags: doc.tags });
   }
+
+  // the Gallery: photos over the last three months (as the design's tiles: soft gradients), and one short video
+  const photos: { top: Rgb; bottom: Rgb; days: number; time: string; by: string }[] = [
+    { top: [244, 184, 150], bottom: [209, 106, 76], days: -1, time: "18:42", by: BRANDON.id },
+    { top: [150, 178, 196], bottom: [84, 116, 140], days: -2, time: "12:05", by: ADELE.id },
+    { top: [163, 196, 150], bottom: [96, 130, 88], days: -4, time: "08:30", by: ADELE.id },
+    { top: [245, 205, 175], bottom: [226, 150, 104], days: -5, time: "17:10", by: BRANDON.id },
+    { top: [210, 196, 170], bottom: [150, 124, 96], days: -6, time: "10:21", by: ADELE.id },
+    { top: [228, 172, 186], bottom: [176, 112, 132], days: -8, time: "19:55", by: BRANDON.id },
+    { top: [196, 186, 232], bottom: [118, 104, 184], days: -9, time: "14:02", by: ADELE.id },
+    { top: [246, 222, 168], bottom: [220, 164, 72], days: -11, time: "07:48", by: BRANDON.id },
+    { top: [190, 186, 180], bottom: [130, 120, 110], days: -34, time: "16:30", by: ADELE.id },
+    { top: [170, 204, 196], bottom: [100, 150, 140], days: -37, time: "11:11", by: BRANDON.id },
+    { top: [240, 204, 186], bottom: [214, 150, 120], days: -40, time: "09:45", by: ADELE.id },
+    { top: [180, 196, 226], bottom: [104, 130, 190], days: -44, time: "13:20", by: BRANDON.id },
+    { top: [236, 214, 196], bottom: [196, 160, 128], days: -66, time: "18:05", by: ADELE.id },
+    { top: [206, 226, 186], bottom: [140, 176, 110], days: -70, time: "15:40", by: BRANDON.id },
+  ];
+  for (const [i, p] of photos.entries()) {
+    const taken = at(p.days, p.time);
+    const bytes = png(1200, 900, p.top, p.bottom);
+    // a day or so later, as people add them
+    const added = new Date(Math.min(Date.parse(taken) + 26 * 3600_000, Date.now())).toISOString();
+    await add({ kind: "photo", name: `IMG_${2041 - i}.png`, mime: "image/png", bytes, by: p.by, added, taken, thumb: png(400, 300, p.top, p.bottom), preview: bytes, width: 1200, height: 900 });
+  }
+  const clipTaken = at(-3, "17:32");
+  await add({
+    kind: "video",
+    name: "Sunset walk.mp4",
+    mime: "video/mp4",
+    bytes: Buffer.from(SAMPLE_CLIP_MP4, "base64"),
+    by: ADELE.id,
+    added: clipTaken,
+    taken: clipTaken,
+    thumb: png(400, 300, [108, 123, 255], [43, 45, 82]),
+    width: 320,
+    height: 240,
+    durationMs: SAMPLE_CLIP_MS,
+  });
+
   files.files.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return files;
 }

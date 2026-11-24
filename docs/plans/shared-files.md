@@ -1,9 +1,14 @@
 # Plan: shared Gallery and Files (photos, videos and documents)
 
-> **Status: steps 1 (Home shortcuts), 2 (schema, keys, quota, Storage, `lib/files/crypto.ts`) and 3 (Files: drive,
-> folders, tags, details sheet, encrypted upload with duplicate skip and the space check) are built; the rest is
-> designed, not built.** Until step 5, the Files search box filters the loaded documents in the browser. The Bin button
-> on screens 36 and 39 comes with the Bin screen (step 6). The screens are in `design/Together.figcraft` (open it in FigCraft), on the
+> **Status: steps 1 (Home shortcuts), 2 (schema, keys, quota, Storage, `lib/files/crypto.ts`), 3 (Files: drive,
+> folders, tags, details sheet, encrypted upload with duplicate skip and the space check) and 4 (Gallery: thumbs,
+> previews and taken dates made in the browser, the decrypted grid by month, the viewer) are built; the rest is
+> designed, not built.** Until step 5, both search boxes filter what's loaded in the browser, and the Gallery has no
+> "Any time" chip. The Bin button on screens 36 and 39 comes with the Bin screen (step 6). Not done yet from step 4:
+> HEIC outside Safari (no `heic2any`; such photos upload without a thumb, show a placeholder tile and are opened by
+> downloading), a video's taken date from its MP4 metadata (the file's date is used), resumable (TUS) uploads for big
+> files, revoking tiles' blob URLs as they scroll away (they're let go when the Gallery closes), and `?item=` links to
+> items beyond the loaded pages. The screens are in `design/Together.figcraft` (open it in FigCraft), on the
 > **📱 Screens** page: the new Home is **05 Home**, and the rest are under **08 — Files: photos, videos & documents**
 > (36–45).
 

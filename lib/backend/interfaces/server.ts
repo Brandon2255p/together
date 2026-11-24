@@ -33,7 +33,10 @@ import type {
   DuplicateMatch,
   FileFolder,
   FilesKey,
+  GalleryCursor,
+  GalleryPage,
   Hue,
+  MonthCount,
   NewUpload,
   SignedFileUrl,
   StartedUpload,
@@ -159,16 +162,20 @@ export interface ServerBackendService {
   settleMissedPeriod(params: { id: string; useBooster: boolean }): Promise<DataResult<Challenge>>;
   deleteChallenge(params: { id: string }): Promise<MutationResult>;
 
-  // Files: shared documents (and, later, photos and videos), encrypted in the browser with the Together's key
+  // Files: shared photos, videos and documents, encrypted in the browser with the Together's key
   /** every version of the current Together's key; the first call makes one */
   filesKeys(): Promise<DataResult<FilesKey[]>>;
   /** the Together's shared space: its quota and what uses it */
   storageUsage(): Promise<DataResult<StorageUsage>>;
   /** the drive: folders, and every document that's ready and not in the bin, newest first */
   getDocuments(): Promise<DataResult<Documents>>;
+  /** photos and videos that are ready and not in the bin, newest taken first, `limit` at a time after `before` */
+  getGallery(params: { before: GalleryCursor | null; limit: number }): Promise<DataResult<GalleryPage>>;
+  /** photos and videos per month taken, newest month first */
+  galleryMonths(): Promise<DataResult<MonthCount[]>>;
   /** files already in this Together (the bin included) with any of these content MACs */
   findDuplicates(params: { macs: string[] }): Promise<DataResult<DuplicateMatch[]>>;
-  /** records an upload (the quota is checked here) and gives a signed upload for the encrypted original */
+  /** records an upload (the quota is checked here) and gives signed uploads for the encrypted original (and thumb and preview) */
   startUpload(params: { togetherId: string } & NewUpload): Promise<DataResult<StartedUpload>>;
   /** checks the uploaded bytes are there and the right size, then makes the file show */
   finishUpload(params: { id: string }): Promise<MutationResult>;
