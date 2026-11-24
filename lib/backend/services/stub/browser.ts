@@ -1,4 +1,6 @@
 import type { BrowserBackendService } from "@/lib/backend/interfaces/browser";
+import { postUpload } from "@/lib/files/client/post-upload";
+import type { UploadTarget } from "@/lib/models";
 
 const wait = (ms = 450) => new Promise((r) => setTimeout(r, ms));
 
@@ -28,12 +30,8 @@ export class StubBrowserService implements BrowserBackendService {
   }
 
   /** the stub's bucket lives on the dev server: /api/stub/storage keeps the encrypted bytes in memory */
-  async uploadFileObject({ path, token, body }: { path: string; token: string; body: Blob }) {
-    const response = await fetch(`/api/stub/storage?path=${encodeURIComponent(path)}`, {
-      method: "PUT",
-      headers: { "x-upload-token": token, "content-type": "application/octet-stream" },
-      body,
-    });
-    return { error: response.ok ? null : { message: "The file didn't upload. Try again." } };
+  /** the stub's signed uploads POST to /api/stub/storage, the same way the browser POSTs to S3 */
+  uploadFileObject({ target, body }: { target: UploadTarget; body: Blob }) {
+    return postUpload(target, body);
   }
 }

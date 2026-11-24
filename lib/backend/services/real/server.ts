@@ -57,6 +57,7 @@ import type {
 import { PERIOD_NOUN, periodStartOf, summarize } from "@/lib/challenges/streak";
 import { addDays, todayKey } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { objectSizes, signDownloads, signUpload } from "@/lib/backend/services/real/file-store";
 import { autocomplete, findPlaceId, getPlace as getGooglePlaceDetails } from "@/lib/google/places";
 
 // The Supabase implementation. Every call runs as the signed-in user, so row-level security (supabase/schemas) decides
@@ -397,7 +398,7 @@ interface DuplicateRow {
 }
 
 const FILE_SELECT = "id, kind, name, mime_type, size_bytes, stored_bytes, key_version, original_path, folder_id, tags, uploaded_by, created_at, taken_at, thumb_path, preview_path, width, height, duration_ms";
-const FILES_BUCKET = "files";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const toFile = (row: FileRow): SharedFile => ({
   id: row.id,
@@ -1280,8 +1281,8 @@ export class RealServerService implements ServerBackendService {
     if (!meId) return fail(SIGNED_OUT);
     const base = `${togetherId}/${upload.id}`;
     const path = `${base}/original.bin`;
-    const thumbPath = upload.hasThumb ? `${base}/thumb.bin` : null;
-    const previewPath = upload.hasPreview ? `${base}/preview.bin` : null;
+    const thumbPath = upload.thumbBytes ? `${base}/thumb.bin` : null;
+    const previewPath = upload.previewBytes ? `${base}/preview.bin` : null;
     const { error } = await sb.from("files").insert({
       id: upload.id,
       together_id: togetherId,
@@ -1306,23 +1307,40 @@ export class RealServerService implements ServerBackendService {
     if (error?.code === "23505" && /content_mac/.test(error.message + (error.details ?? ""))) return ok<StartedUpload>({ duplicate: true });
     if (error?.code === NO_SPACE) return fail("Not enough space left in your Together for this file.");
     if (error) return fail(message(error, "We couldn't start that upload. Try again."));
-    const bucket = sb.storage.from(FILES_BUCKET);
-    const signed = await Promise.all([path, thumbPath, previewPath].map((p) => (p ? bucket.createSignedUploadUrl(p) : Promise.resolve(null))));
-    const failed = signed.find((s) => s?.error)?.error;
-    if (failed) {
-      console.error("[supabase] storage", failed.message);
+    try {
+      // each signed upload takes exactly the size declared for its object, so stored_bytes (what the quota counts) is true
+      const [target, thumb, preview] = await Promise.all([
+        signUpload(path, upload.originalBytes),
+        thumbPath ? signUpload(thumbPath, upload.thumbBytes!) : Promise.resolve(null),
+        previewPath ? signUpload(previewPath, upload.previewBytes!) : Promise.resolve(null),
+      ]);
+      return ok<StartedUpload>({ duplicate: false, target, thumb, preview });
+    } catch (e) {
+      console.error("[s3] sign upload", e instanceof Error ? e.message : e);
       return fail("We couldn't start that upload. Try again.");
     }
-    const target = (i: number) => {
-      const s = signed[i];
-      return s?.data ? { path: s.data.path, token: s.data.token } : null;
-    };
-    return ok<StartedUpload>({ duplicate: false, target: target(0)!, thumb: target(1), preview: target(2) });
   }
 
   async finishUpload({ id }: { id: string }): Promise<MutationResult> {
     const sb = await createClient();
-    const { error } = await sb.rpc("v1_finish_upload", { p_id: id });
+    const { data: row, error: readError } = await sb
+      .from("files")
+      .select("original_path, thumb_path, preview_path, stored_bytes")
+      .eq("id", id)
+      .eq("status", "uploading")
+      .maybeSingle<{ original_path: string; thumb_path: string | null; preview_path: string | null; stored_bytes: number }>();
+    if (readError) return notSaved(message(readError, TRY_AGAIN));
+    if (!row) return notSaved("That upload isn't waiting to finish.");
+    const paths = [row.original_path, row.thumb_path, row.preview_path].filter((p): p is string => p !== null);
+    try {
+      const sizes = await objectSizes(paths);
+      const total = sizes.reduce<number>((sum, n) => sum + (n ?? 0), 0);
+      if (sizes.some((n) => n === null) || total > Number(row.stored_bytes)) return notSaved("The file didn't arrive whole. Try adding it again.");
+    } catch (e) {
+      console.error("[s3] check upload", e instanceof Error ? e.message : e);
+      return notSaved(TRY_AGAIN);
+    }
+    const { error } = await sb.rpc("v2_finish_upload", { p_id: id });
     return error ? notSaved(message(error, "The file didn't arrive whole. Try adding it again.")) : saved;
   }
 
@@ -1373,13 +1391,23 @@ export class RealServerService implements ServerBackendService {
 
   async signedFileUrls({ paths }: { paths: string[] }): Promise<DataResult<SignedFileUrl[]>> {
     if (!paths.length) return ok([]);
+    // only objects of files this person can see (row-level security on files decides): <together>/<file id>/<part>.bin
+    const ids = [...new Set(paths.map((p) => p.split("/")[1]).filter((id): id is string => !!id && UUID.test(id)))];
+    if (!ids.length) return ok([]);
     const sb = await createClient();
-    const { data, error } = await sb.storage.from(FILES_BUCKET).createSignedUrls(paths, 3600);
-    if (error) {
-      console.error("[supabase] storage", error.message);
+    const { data, error } = await sb
+      .from("files")
+      .select("original_path, thumb_path, preview_path")
+      .in("id", ids)
+      .overrideTypes<{ original_path: string; thumb_path: string | null; preview_path: string | null }[], { merge: false }>();
+    if (error) return fail(message(error, "We couldn't fetch that file. Try again."));
+    const allowed = new Set(data.flatMap((f) => [f.original_path, f.thumb_path, f.preview_path]));
+    try {
+      return ok(await signDownloads(paths.filter((p) => allowed.has(p))));
+    } catch (e) {
+      console.error("[s3] sign downloads", e instanceof Error ? e.message : e);
       return fail("We couldn't fetch that file. Try again.");
     }
-    return ok(data.flatMap((d) => (d.path && d.signedUrl ? [{ path: d.path, url: d.signedUrl }] : [])));
   }
 
   private async updateFile(id: string, change: Record<string, unknown>, fallback: string): Promise<MutationResult> {

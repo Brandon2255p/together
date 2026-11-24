@@ -130,8 +130,9 @@ export function useFileUpload({ together, prepare, folderId, noun, onAdded, onRe
           folderId: prep.kind === "document" ? folderId : null,
           tags: [],
           takenAt: prep.takenAt,
-          hasThumb: thumb !== null,
-          hasPreview: preview !== null,
+          originalBytes: sealed.size,
+          thumbBytes: thumb?.size ?? null,
+          previewBytes: preview?.size ?? null,
           width: prep.width,
           height: prep.height,
           durationMs: prep.durationMs,
@@ -152,9 +153,9 @@ export function useFileUpload({ together, prepare, folderId, noun, onAdded, onRe
         }
         const { target, thumb: thumbTarget, preview: previewTarget } = started.data;
         const sends = [
-          browserBackend.uploadFileObject({ path: target.path, token: target.token, body: sealed }),
-          thumb && thumbTarget ? browserBackend.uploadFileObject({ path: thumbTarget.path, token: thumbTarget.token, body: thumb }) : Promise.resolve(null),
-          preview && previewTarget ? browserBackend.uploadFileObject({ path: previewTarget.path, token: previewTarget.token, body: preview }) : Promise.resolve(null),
+          browserBackend.uploadFileObject({ target, body: sealed }),
+          thumb && thumbTarget ? browserBackend.uploadFileObject({ target: thumbTarget, body: thumb }) : Promise.resolve(null),
+          preview && previewTarget ? browserBackend.uploadFileObject({ target: previewTarget, body: preview }) : Promise.resolve(null),
         ];
         const sent = await Promise.all(sends);
         const finished = sent.some((s) => s?.error) ? { success: false } : await finishUpload(id);

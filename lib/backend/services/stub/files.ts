@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { addDays, todayKey } from "@/lib/format";
 import { contentMac, encryptFile, importTogetherKey } from "@/lib/files/crypto";
-import type { DuplicateMatch, FileFolder, Hue, NewUpload, SharedFile } from "@/lib/models";
+import type { DuplicateMatch, FileFolder, Hue, NewUpload, SharedFile, UploadTarget } from "@/lib/models";
 import { ADELE, BRANDON } from "@/lib/backend/services/stub/seed";
 import { SAMPLE_CLIP_MP4, SAMPLE_CLIP_MS } from "@/lib/backend/services/stub/sample-clip";
 
@@ -27,8 +27,8 @@ export interface StubFiles {
 
 interface StubBucket {
   objects: Map<string, Uint8Array>;
-  /** path → the token its signed upload was given */
-  uploads: Map<string, string>;
+  /** path → its signed upload's token and the exact size it accepts */
+  uploads: Map<string, { token: string; bytes: number }>;
   togethers: Map<string, Promise<StubFiles>>;
 }
 
@@ -50,11 +50,11 @@ const empty = (): StubFiles => ({ key: randomBytes(32).toString("base64"), folde
 
 export const objectPath = (togetherId: string, fileId: string, part: "original" | "thumb" | "preview" = "original") => `${togetherId}/${fileId}/${part}.bin`;
 
-/** a signed upload: the path may then be written once with this token */
-export function signUpload(path: string): string {
+/** a signed upload: the path may then be written once, with exactly `bytes` bytes, by POSTing these fields */
+export function signUpload(path: string, bytes: number): UploadTarget {
   const token = randomUUID();
-  bucket().uploads.set(path, token);
-  return token;
+  bucket().uploads.set(path, { token, bytes });
+  return { path, url: "/api/stub/storage", fields: { key: path, token } };
 }
 
 /** what /api/stub/storage reads and writes */
@@ -62,7 +62,8 @@ export const stubStorage = {
   get: (path: string) => bucket().objects.get(path) ?? null,
   put(path: string, token: string, bytes: Uint8Array): boolean {
     const b = bucket();
-    if (!token || b.uploads.get(path) !== token) return false;
+    const signed = b.uploads.get(path);
+    if (!token || signed?.token !== token || signed.bytes !== bytes.length) return false;
     b.uploads.delete(path);
     b.objects.set(path, bytes);
     return true;
@@ -98,8 +99,8 @@ export function newRow(togetherId: string, upload: NewUpload, by: string): StubF
     uploadedBy: by,
     createdAt: now,
     takenAt: upload.takenAt ?? now,
-    thumbPath: upload.hasThumb ? objectPath(togetherId, upload.id, "thumb") : null,
-    previewPath: upload.hasPreview ? objectPath(togetherId, upload.id, "preview") : null,
+    thumbPath: upload.thumbBytes ? objectPath(togetherId, upload.id, "thumb") : null,
+    previewPath: upload.previewBytes ? objectPath(togetherId, upload.id, "preview") : null,
     width: upload.width,
     height: upload.height,
     durationMs: upload.kind === "video" ? upload.durationMs : null,

@@ -1,0 +1,150 @@
+name: Infra
+
+# OpenTofu for the AWS side of Together (infra/README.md): the S3 bucket for shared files and the role Vercel uses.
+#   * Every pull request and push: fmt and validate both stacks (no AWS needed).
+#   * Pull requests from this repository: plan infra/storage as together-infra-plan (read only) and show the plan in
+#     the job summary.
+#   * Pushes to main: apply infra/storage as together-infra-apply, through the "infra" environment (add required
+#     reviewers to it in Settings > Environments to approve each apply by hand).
+# infra/bootstrap is never run here: it makes these roles, so it's applied by hand.
+#
+# Repository variables (Settings > Secrets and variables > Actions > Variables), from infra/bootstrap's outputs:
+#   AWS_REGION                region of the state bucket, e.g. af-south-1
+#   AWS_STATE_BUCKET          the OpenTofu state bucket
+#   AWS_INFRA_PLAN_ROLE_ARN   together-infra-plan
+#   AWS_INFRA_APPLY_ROLE_ARN  together-infra-apply
+# Until they're set, plan and apply are skipped with a notice.
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/infra.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/infra.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TOFU_VERSION: 1.13.9
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+
+jobs:
+  check:
+    name: Format & validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - run: tofu fmt -check -recursive -diff infra
+      - name: Validate
+        run: |
+          for stack in infra/bootstrap infra/storage; do
+            tofu -chdir="$stack" init -backend=false -lockfile=readonly
+            tofu -chdir="$stack" validate
+          done
+
+  plan:
+    name: Plan storage
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: infra-plan-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      ROLE: ${{ vars.AWS_INFRA_PLAN_ROLE_ARN }}
+    steps:
+      - name: AWS is set up
+        id: ready
+        run: |
+          if [ -z "$ROLE" ] || [ -z "${{ vars.AWS_STATE_BUCKET }}" ] || [ -z "${{ vars.AWS_REGION }}" ]; then
+            echo "::notice::Plan skipped: set the AWS_REGION, AWS_STATE_BUCKET and AWS_INFRA_PLAN_ROLE_ARN variables (infra/README.md)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/checkout@v4
+      - if: steps.ready.outputs.ok == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: together-plan-${{ github.run_id }}
+      - if: steps.ready.outputs.ok == 'true'
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - if: steps.ready.outputs.ok == 'true'
+        name: Plan
+        working-directory: infra/storage
+        run: |
+          tofu init -lockfile=readonly -backend-config="bucket=${{ vars.AWS_STATE_BUCKET }}" -backend-config="region=${{ vars.AWS_REGION }}"
+          tofu plan -lock-timeout=5m -no-color -out=storage.tfplan
+          {
+            echo "### OpenTofu plan: infra/storage"
+            echo '```'
+            tofu show -no-color storage.tfplan | tail -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Apply storage
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    environment: infra
+    permissions:
+      contents: read
+      id-token: write
+    # one apply at a time, and never cancel one halfway
+    concurrency:
+      group: infra-apply
+      cancel-in-progress: false
+    env:
+      ROLE: ${{ vars.AWS_INFRA_APPLY_ROLE_ARN }}
+    steps:
+      - name: AWS is set up
+        id: ready
+        run: |
+          if [ -z "$ROLE" ] || [ -z "${{ vars.AWS_STATE_BUCKET }}" ] || [ -z "${{ vars.AWS_REGION }}" ]; then
+            echo "::notice::Apply skipped: set the AWS_REGION, AWS_STATE_BUCKET and AWS_INFRA_APPLY_ROLE_ARN variables (infra/README.md)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/checkout@v4
+      - if: steps.ready.outputs.ok == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: together-apply-${{ github.run_id }}
+      - if: steps.ready.outputs.ok == 'true'
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - if: steps.ready.outputs.ok == 'true'
+        name: Apply
+        working-directory: infra/storage
+        run: |
+          tofu init -lockfile=readonly -backend-config="bucket=${{ vars.AWS_STATE_BUCKET }}" -backend-config="region=${{ vars.AWS_REGION }}"
+          tofu apply -lock-timeout=5m -auto-approve -no-color
+          {
+            echo "### infra/storage outputs (set these in Vercel)"
+            echo '```'
+            tofu output -no-color
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

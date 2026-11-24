@@ -50,8 +50,19 @@ export async function startUpload(togetherId: string, upload: NewUpload) {
   if (!name) return { data: null, error: "That file has no name." };
   if (!UUID.test(upload.id) || !MAC.test(upload.contentMac) || !KINDS.includes(upload.kind)) return { data: null, error: "That upload doesn't look right." };
   if (upload.sizeBytes > MAX_FILE_BYTES) return { data: null, error: `${name} is over 1 GB, the most one file can be.` };
-  if (!(upload.storedBytes > 0) || upload.sizeBytes < 0) return { data: null, error: "That upload doesn't look right." };
   const media = upload.kind !== "document";
+  const part = (n: number | null) => n === null || (Number.isInteger(n) && n > 0);
+  const thumbBytes = media ? upload.thumbBytes : null;
+  const previewBytes = media ? upload.previewBytes : null;
+  // each object is signed for exactly its size, so the declared total has to add up
+  if (
+    !(Number.isInteger(upload.originalBytes) && upload.originalBytes > 0) ||
+    !part(thumbBytes) ||
+    !part(previewBytes) ||
+    upload.sizeBytes < 0 ||
+    upload.storedBytes !== upload.originalBytes + (thumbBytes ?? 0) + (previewBytes ?? 0)
+  )
+    return { data: null, error: "That upload doesn't look right." };
   const takenAt = upload.takenAt && !Number.isNaN(Date.parse(upload.takenAt)) ? new Date(upload.takenAt).toISOString() : null;
   return serverBackend.startUpload({
     togetherId,
@@ -62,8 +73,8 @@ export async function startUpload(togetherId: string, upload: NewUpload) {
     folderId: media ? null : upload.folderId,
     tags: media ? [] : cleanTags(upload.tags),
     takenAt,
-    hasThumb: media && upload.hasThumb,
-    hasPreview: media && upload.hasPreview,
+    thumbBytes,
+    previewBytes,
     width: media ? dimension(upload.width) : null,
     height: media ? dimension(upload.height) : null,
     durationMs: upload.kind === "video" && upload.durationMs !== null && Number.isInteger(upload.durationMs) && upload.durationMs >= 0 ? upload.durationMs : null,

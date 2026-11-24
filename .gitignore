@@ -8,3 +8,9 @@ build
 next-env.d.ts
 .DS_Store
 .vercel
+
+# OpenTofu
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

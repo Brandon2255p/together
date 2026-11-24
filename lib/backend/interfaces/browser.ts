@@ -1,3 +1,5 @@
+import type { UploadTarget } from "@/lib/models";
+
 export interface AuthError {
   message: string;
 }
@@ -15,6 +17,6 @@ export interface BrowserBackendService {
    * row-level security lets you see it. Returns the function that stops listening.
    */
   watchTogether(onChange: () => void): () => void;
-  /** sends an encrypted object to Storage with a signed upload from startUpload; the bytes never pass the server */
-  uploadFileObject(params: { path: string; token: string; body: Blob }): Promise<{ error: AuthError | null }>;
+  /** sends an encrypted object to storage with a signed upload from startUpload; the bytes never pass the server */
+  uploadFileObject(params: { target: UploadTarget; body: Blob }): Promise<{ error: AuthError | null }>;
 }
