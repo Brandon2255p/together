@@ -37,7 +37,7 @@ variable "vercel_environments" {
 variable "app_origins" {
   description = "Browser origins that upload and download objects directly (CORS). One * is allowed per origin."
   type        = list(string)
-  default     = ["https://*.vercel.app", "http://localhost:3000"]
+  default     = ["https://together.openprocess.me", "https://*.vercel.app", "http://localhost:3000"]
 }
 
 variable "permissions_boundary" {
