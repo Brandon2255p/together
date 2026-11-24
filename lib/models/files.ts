@@ -96,18 +96,21 @@ export interface NewUpload {
   folderId: string | null;
   tags: string[];
   takenAt: string | null;
-  /** photos and videos: whether a thumb and a preview come with it (storedBytes counts them) */
-  hasThumb: boolean;
-  hasPreview: boolean;
+  /** the size of each encrypted object; storedBytes is their sum, and each signed upload accepts exactly its size */
+  originalBytes: number;
+  /** photos and videos: the encrypted thumb and preview, when there are any */
+  thumbBytes: number | null;
+  previewBytes: number | null;
   width: number | null;
   height: number | null;
   durationMs: number | null;
 }
 
-/** where to send the encrypted original: a signed upload for one path */
+/** a signed upload for one object: POST `fields`, then the bytes as "file", to `url` (S3, or the stub) */
 export interface UploadTarget {
   path: string;
-  token: string;
+  url: string;
+  fields: Record<string, string>;
 }
 
 /** a started upload: where to put the bytes, or that someone else just added the same file */

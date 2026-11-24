@@ -831,8 +831,12 @@ export class StubServerService implements ServerBackendService {
     if (used + upload.storedBytes > QUOTA_BYTES) return fail<StartedUpload>("Not enough space left in your Together for this file.");
     const row = newRow(togetherId, upload, ME);
     files.files.unshift(row);
-    const sign = (path: string | null) => (path ? { path, token: signUpload(path) } : null);
-    return ok<StartedUpload>({ duplicate: false, target: sign(row.originalPath)!, thumb: sign(row.thumbPath), preview: sign(row.previewPath) });
+    return ok<StartedUpload>({
+      duplicate: false,
+      target: signUpload(row.originalPath, upload.originalBytes),
+      thumb: row.thumbPath ? signUpload(row.thumbPath, upload.thumbBytes!) : null,
+      preview: row.previewPath ? signUpload(row.previewPath, upload.previewBytes!) : null,
+    });
   }
 
   async finishUpload({ id: fileId }: { id: string }) {

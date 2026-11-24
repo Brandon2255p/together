@@ -230,6 +230,12 @@ so that this needs no schema reshuffle.
 
 ## Storage
 
+> **Now S3, not Supabase Storage.** The objects live in a private S3 bucket made by `infra/storage` (see
+> `infra/README.md`). The server signs POST uploads that accept exactly each object's declared size and GETs that last
+> an hour, checks uploads arrived with `HeadObject`, then calls `v2_finish_upload`. Who may sign what comes from
+> row-level security on `files`. The Supabase Storage policies below and `v1_finish_upload` stay until nothing uses
+> them. What follows describes the original Supabase design.
+
 - **Private bucket `files`** in `supabase/config.toml` (`[storage.buckets.files]`, `public = false`,
   `file_size_limit = "1GiB"`).
 - **Paths:** `<together_id>/<file_id>/original.bin`, `thumb.bin` (≈400 px WebP, for grid tiles) and `preview.bin`

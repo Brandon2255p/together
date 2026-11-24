@@ -1,5 +1,7 @@
 import type { BrowserBackendService } from "@/lib/backend/interfaces/browser";
 import { createClient } from "@/lib/supabase/client";
+import { postUpload } from "@/lib/files/client/post-upload";
+import type { UploadTarget } from "@/lib/models";
 
 /** Supabase email OTP: signInWithOtp emails a 6-digit code (set the "Magic Link" email template to show {{ .Token }}) */
 export class RealBrowserService implements BrowserBackendService {
@@ -30,9 +32,8 @@ export class RealBrowserService implements BrowserBackendService {
     return () => void sb.removeChannel(channel);
   }
 
-  /** a signed upload into the private "files" bucket; the bytes go straight to Storage, not through Vercel */
-  async uploadFileObject({ path, token, body }: { path: string; token: string; body: Blob }) {
-    const { error } = await createClient().storage.from("files").uploadToSignedUrl(path, token, body, { contentType: "application/octet-stream" });
-    return { error: error ? { message: error.message } : null };
+  /** a signed POST upload into the S3 files bucket (infra/storage); the bytes go straight to S3, not through Vercel */
+  uploadFileObject({ target, body }: { target: UploadTarget; body: Blob }) {
+    return postUpload(target, body);
   }
 }

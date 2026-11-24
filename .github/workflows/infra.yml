@@ -1,0 +1,148 @@
+name: Infra
+
+# OpenTofu for the cloud side of Together (infra/README.md): the S3 bucket for shared files, the role Vercel uses to
+# reach it, and the Vercel project's OIDC setting and file-storage env vars.
+#   * Every pull request and push: fmt and validate (no cloud access needed).
+#   * Pull requests from this repository: plan as github-together-tofu-plan (read only) and show it in the job summary.
+#   * Pushes to main: apply as github-together-tofu-apply.
+# GitHub signs in to AWS with OIDC; the roles, the state bucket and the permissions boundary are made outside this
+# repo. The roles trust this repository's pull requests (plan) and its main branch (apply) only, so these jobs must not
+# use `environment:` (that changes the token's subject and AWS would refuse it).
+#
+# Secret (Settings > Secrets and variables > Actions): VERCEL_API_TOKEN, a Vercel token scoped to the team. Until it's
+# set, plan and apply are skipped with a notice.
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/infra.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/infra.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TOFU_VERSION: 1.13.9
+  AWS_REGION: af-south-1
+  PLAN_ROLE: arn:aws:iam::768321396008:role/github-together-tofu-plan
+  APPLY_ROLE: arn:aws:iam::768321396008:role/github-together-tofu-apply
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+
+jobs:
+  check:
+    name: Format & validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - run: tofu fmt -check -recursive -diff infra
+      - name: Validate
+        working-directory: infra/storage
+        run: |
+          tofu init -backend=false -lockfile=readonly
+          tofu validate
+
+  plan:
+    name: Plan
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: infra-plan-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+    steps:
+      - name: Vercel token is set
+        id: ready
+        run: |
+          if [ -z "$VERCEL_API_TOKEN" ]; then
+            echo "::notice::Plan skipped: set the VERCEL_API_TOKEN secret (infra/README.md)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/checkout@v4
+      - if: steps.ready.outputs.ok == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.PLAN_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: together-plan-${{ github.run_id }}
+      - if: steps.ready.outputs.ok == 'true'
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - if: steps.ready.outputs.ok == 'true'
+        name: Plan
+        working-directory: infra/storage
+        run: |
+          tofu init -lockfile=readonly
+          tofu plan -lock-timeout=5m -no-color -out=storage.tfplan
+          {
+            echo "### OpenTofu plan: infra/storage"
+            echo '```'
+            tofu show -no-color storage.tfplan | tail -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Apply
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    # one apply at a time, and never cancel one halfway
+    concurrency:
+      group: infra-apply
+      cancel-in-progress: false
+    env:
+      VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+    steps:
+      - name: Vercel token is set
+        id: ready
+        run: |
+          if [ -z "$VERCEL_API_TOKEN" ]; then
+            echo "::notice::Apply skipped: set the VERCEL_API_TOKEN secret (infra/README.md)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/checkout@v4
+      - if: steps.ready.outputs.ok == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.APPLY_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: together-apply-${{ github.run_id }}
+      - if: steps.ready.outputs.ok == 'true'
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - if: steps.ready.outputs.ok == 'true'
+        name: Apply
+        working-directory: infra/storage
+        run: |
+          tofu init -lockfile=readonly
+          tofu apply -lock-timeout=5m -auto-approve -no-color
+          {
+            echo "### infra/storage outputs"
+            echo '```'
+            tofu output -no-color
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

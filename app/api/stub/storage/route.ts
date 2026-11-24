@@ -14,10 +14,17 @@ export function GET(request: Request) {
   return new Response(bytes as Uint8Array<ArrayBuffer>, { headers: { "content-type": "application/octet-stream", "cache-control": "private, no-store" } });
 }
 
-export async function PUT(request: Request) {
+/** a signed POST upload, shaped like S3's: the signed fields, then the bytes as "file" */
+export async function POST(request: Request) {
   if (!stubStorage) return notFound();
-  const path = new URL(request.url).searchParams.get("path") ?? "";
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  const stored = stubStorage.put(path, request.headers.get("x-upload-token") ?? "", bytes);
-  return stored ? new Response(null, { status: 204 }) : new Response("That upload address isn't valid.", { status: 403 });
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!(file instanceof Blob)) return new Response("No file.", { status: 400 });
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const field = (name: string) => {
+    const value = form.get(name);
+    return typeof value === "string" ? value : "";
+  };
+  const stored = stubStorage.put(field("key"), field("token"), bytes);
+  return stored ? new Response(null, { status: 204 }) : new Response("That upload isn't valid, or isn't the size that was signed.", { status: 403 });
 }

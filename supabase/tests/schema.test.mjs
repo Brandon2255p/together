@@ -476,6 +476,22 @@ await as("gina", "update storage.objects set metadata = '{}' where name = $1", [
 await as("gina", "delete from storage.objects where name = $1", [sunset.paths[0]]);
 check("objects can't be changed or deleted by members", (await db.query("select metadata from storage.objects where name = $1", [sunset.paths[0]])).rows[0]?.metadata?.size === 300);
 
+// finishing an upload kept in S3 (v2): the server has checked the objects, so only who and what state are checked here
+const s3 = await startUpload("ivy", { n: 50, stored: 700, name: "Beach.jpg", together: tI });
+await fails("someone else can't finish your S3 upload", "hal", "select public.v2_finish_upload($1)", [s3.id], /isn't waiting/);
+const s3done = await one("ivy", "select status, stored_bytes::int from public.v2_finish_upload($1)", [s3.id]);
+check("v2 makes it ready and keeps the declared size", s3done.status === "ready" && s3done.stored_bytes === 700, JSON.stringify(s3done));
+await fails("a ready file can't be finished again", "ivy", "select public.v2_finish_upload($1)", [s3.id], /isn't waiting/);
+try {
+  await db.exec("reset role; set role anon;");
+  await db.query("select public.v2_finish_upload($1)", [s3.id]);
+  check("anon can't finish uploads", false, "expected an error");
+} catch (e) {
+  check("anon can't finish uploads", /permission denied/.test(e.message), e.message);
+} finally {
+  await db.exec("reset role");
+}
+
 // duplicates
 await fails("the same file twice is refused", "hal", "insert into public.files (id, kind, name, mime_type, size_bytes, stored_bytes, key_version, content_mac, original_path) values ($1, 'photo', 'x', 'x', 1, 1, 1, $2, $3)", [otherId, mac(1), `${tG}/${otherId}/original.bin`], /duplicate key/);
 const dup = await rows("hal", "select * from public.v1_find_duplicates($1)", [[mac(1), mac(99)]]);
