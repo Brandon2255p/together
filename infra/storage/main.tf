@@ -1,7 +1,8 @@
 # Where a Together's photos, videos and documents are kept: one private bucket of objects that are already encrypted
 # in the browser (lib/files/crypto.ts), at <together_id>/<file_id>/{original,thumb,preview}.bin. The browser uploads
 # and downloads them directly with short-lived signed requests made by the app's server; the server reaches AWS as
-# the together-files-vercel role through Vercel's OIDC tokens, so no AWS keys are stored anywhere.
+# the together-files-vercel role through Vercel's OIDC tokens, so no AWS keys are stored anywhere. The Vercel project
+# itself is managed here too (vercel.tf), so its OIDC setting and env vars follow the bucket and role.
 
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
@@ -129,6 +130,7 @@ resource "aws_iam_role" "vercel" {
   description          = "The Together app on Vercel: signs uploads and downloads in the files bucket"
   assume_role_policy   = data.aws_iam_policy_document.vercel_trust.json
   max_session_duration = 3600
+  permissions_boundary = "arn:${local.partition}:iam::${local.account}:policy/${var.permissions_boundary}"
 }
 
 # Signed requests act with the signer's rights: the app signs uploads (PutObject), downloads (GetObject), and checks

@@ -1,14 +1,14 @@
 output "files_bucket" {
-  description = "Set as FILES_BUCKET in the Vercel project."
+  description = "The files bucket (FILES_BUCKET in Vercel, set by vercel.tf)."
   value       = aws_s3_bucket.files.bucket
 }
 
 output "files_region" {
-  description = "Set as FILES_REGION in the Vercel project."
+  description = "Its region (FILES_REGION in Vercel)."
   value       = var.region
 }
 
 output "vercel_role_arn" {
-  description = "Set as AWS_ROLE_ARN in the Vercel project."
+  description = "The role Vercel's functions assume (AWS_ROLE_ARN in Vercel)."
   value       = aws_iam_role.vercel.arn
 }
