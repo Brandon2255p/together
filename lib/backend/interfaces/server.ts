@@ -29,6 +29,15 @@ import type {
   InvitePreview,
   MemberRole,
   TogetherSummary,
+  Documents,
+  DuplicateMatch,
+  FileFolder,
+  FilesKey,
+  Hue,
+  NewUpload,
+  SignedFileUrl,
+  StartedUpload,
+  StorageUsage,
 } from "@/lib/models";
 
 /**
@@ -149,4 +158,31 @@ export interface ServerBackendService {
   /** settles a missed period that's at risk: a booster covers it, or the streak is let go */
   settleMissedPeriod(params: { id: string; useBooster: boolean }): Promise<DataResult<Challenge>>;
   deleteChallenge(params: { id: string }): Promise<MutationResult>;
+
+  // Files: shared documents (and, later, photos and videos), encrypted in the browser with the Together's key
+  /** every version of the current Together's key; the first call makes one */
+  filesKeys(): Promise<DataResult<FilesKey[]>>;
+  /** the Together's shared space: its quota and what uses it */
+  storageUsage(): Promise<DataResult<StorageUsage>>;
+  /** the drive: folders, and every document that's ready and not in the bin, newest first */
+  getDocuments(): Promise<DataResult<Documents>>;
+  /** files already in this Together (the bin included) with any of these content MACs */
+  findDuplicates(params: { macs: string[] }): Promise<DataResult<DuplicateMatch[]>>;
+  /** records an upload (the quota is checked here) and gives a signed upload for the encrypted original */
+  startUpload(params: { togetherId: string } & NewUpload): Promise<DataResult<StartedUpload>>;
+  /** checks the uploaded bytes are there and the right size, then makes the file show */
+  finishUpload(params: { id: string }): Promise<MutationResult>;
+  renameFile(params: { id: string; name: string }): Promise<MutationResult>;
+  /** null takes it out of any folder */
+  moveFile(params: { id: string; folderId: string | null }): Promise<MutationResult>;
+  setFileTags(params: { id: string; tags: string[] }): Promise<MutationResult>;
+  /** it stays 30 days, still counting towards the quota, and anyone in the Together can restore it */
+  moveToBin(params: { id: string }): Promise<MutationResult>;
+  restoreFile(params: { id: string }): Promise<MutationResult>;
+  createFolder(params: { name: string; hue: Hue }): Promise<DataResult<FileFolder>>;
+  renameFolder(params: { id: string; name: string }): Promise<MutationResult>;
+  /** only an empty folder (files in the bin don't count; they lose their folder) */
+  deleteFolder(params: { id: string }): Promise<MutationResult>;
+  /** signed addresses to download encrypted objects, good for an hour */
+  signedFileUrls(params: { paths: string[] }): Promise<DataResult<SignedFileUrl[]>>;
 }

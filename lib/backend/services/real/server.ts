@@ -40,6 +40,16 @@ import type {
   Together,
   TogetherSummary,
   WishItem,
+  Documents,
+  DuplicateMatch,
+  FileFolder,
+  FileKind,
+  FilesKey,
+  NewUpload,
+  SharedFile,
+  SignedFileUrl,
+  StartedUpload,
+  StorageUsage,
 } from "@/lib/models";
 import { PERIOD_NOUN, periodStartOf, summarize } from "@/lib/challenges/streak";
 import { addDays, todayKey } from "@/lib/format";
@@ -333,6 +343,67 @@ const ok = <T>(data: T): DataResult<T> => ({ data });
 const fail = <T>(error: string): DataResult<T> => ({ data: null, error });
 const saved: MutationResult = { success: true };
 const notSaved = (error: string): MutationResult => ({ success: false, error });
+
+// ---- Files -------------------------------------------------------------------
+
+interface FileRow {
+  id: string;
+  kind: FileKind;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  stored_bytes: number;
+  key_version: number;
+  original_path: string;
+  folder_id: string | null;
+  tags: string[];
+  uploaded_by: string | null;
+  created_at: string;
+  taken_at: string;
+}
+interface FolderRow {
+  id: string;
+  name: string;
+  hue: Hue;
+}
+interface UsageJson {
+  quota_bytes: number;
+  used_bytes: number;
+  photos: { count: number; bytes: number };
+  videos: { count: number; bytes: number };
+  documents: { count: number; bytes: number };
+  bin: { count: number; bytes: number };
+}
+interface DuplicateRow {
+  content_mac: string;
+  file_id: string;
+  name: string;
+  uploaded_by_name: string | null;
+  created_at: string;
+  in_bin: boolean;
+}
+
+const FILE_SELECT = "id, kind, name, mime_type, size_bytes, stored_bytes, key_version, original_path, folder_id, tags, uploaded_by, created_at, taken_at";
+const FILES_BUCKET = "files";
+
+const toFile = (row: FileRow): SharedFile => ({
+  id: row.id,
+  kind: row.kind,
+  name: row.name,
+  mimeType: row.mime_type,
+  sizeBytes: Number(row.size_bytes),
+  storedBytes: Number(row.stored_bytes),
+  keyVersion: row.key_version,
+  originalPath: row.original_path,
+  folderId: row.folder_id,
+  tags: row.tags,
+  uploadedBy: row.uploaded_by,
+  createdAt: row.created_at,
+  takenAt: row.taken_at,
+});
+
+/** the quota trigger (triggers/files_quota.sql) raises 53100 with a message that says how much is left */
+const NO_SPACE = "53100";
 
 const SIGNED_OUT = "Sign in again to carry on.";
 const NO_TOGETHER = "You're not in a Together yet.";
@@ -1080,5 +1151,170 @@ export class RealServerService implements ServerBackendService {
     const sb = await createClient();
     const { error } = await sb.from("challenges").delete().eq("id", id);
     return error ? notSaved(message(error, "We couldn't delete that challenge. Try again.")) : saved;
+  }
+
+  // ---- Files ------------------------------------------------------------------
+
+  async filesKeys(): Promise<DataResult<FilesKey[]>> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_files_keys");
+    const data = result.data as { version: number; key: string; active: boolean }[] | null;
+    if (result.error) return fail(message(result.error, "We couldn't open your files. Try again."));
+    if (!data?.length) return fail(NO_TOGETHER);
+    return ok(data.map((k) => ({ version: k.version, key: k.key, active: k.active })));
+  }
+
+  async storageUsage(): Promise<DataResult<StorageUsage>> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_storage_usage");
+    const data = result.data as UsageJson | null;
+    if (result.error) return fail(message(result.error, "We couldn't check your space. Try again."));
+    if (!data) return fail(NO_TOGETHER);
+    const part = (p: { count: number; bytes: number }) => ({ count: Number(p.count), bytes: Number(p.bytes) });
+    return ok({
+      quotaBytes: Number(data.quota_bytes),
+      usedBytes: Number(data.used_bytes),
+      photos: part(data.photos),
+      videos: part(data.videos),
+      documents: part(data.documents),
+      bin: part(data.bin),
+    });
+  }
+
+  async getDocuments(): Promise<DataResult<Documents>> {
+    const sb = await createClient();
+    const [folders, files] = await Promise.all([
+      sb.from("file_folders").select("id, name, hue").order("created_at").overrideTypes<FolderRow[], { merge: false }>(),
+      sb
+        .from("files")
+        .select(FILE_SELECT)
+        .eq("kind", "document")
+        .eq("status", "ready")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .overrideTypes<FileRow[], { merge: false }>(),
+    ]);
+    const error = folders.error ?? files.error;
+    if (error) return fail(message(error, "We couldn't load your files. Try again."));
+    return ok({ folders: (folders.data ?? []).map((f): FileFolder => ({ id: f.id, name: f.name, hue: f.hue })), files: (files.data ?? []).map(toFile) });
+  }
+
+  async findDuplicates({ macs }: { macs: string[] }): Promise<DataResult<DuplicateMatch[]>> {
+    if (!macs.length) return ok([]);
+    const sb = await createClient();
+    const result = await sb.rpc("v1_find_duplicates", { p_macs: macs });
+    const data = result.data as DuplicateRow[] | null;
+    if (result.error) return fail(message(result.error, "We couldn't check for copies. Try again."));
+    return ok(
+      (data ?? []).map((d) => ({
+        contentMac: d.content_mac,
+        fileId: d.file_id,
+        name: d.name,
+        uploadedByName: d.uploaded_by_name,
+        createdAt: d.created_at,
+        inBin: d.in_bin,
+      })),
+    );
+  }
+
+  async startUpload({ togetherId, ...upload }: { togetherId: string } & NewUpload): Promise<DataResult<StartedUpload>> {
+    const sb = await createClient();
+    const meId = await currentUserId(sb);
+    if (!meId) return fail(SIGNED_OUT);
+    const path = `${togetherId}/${upload.id}/original.bin`;
+    const { error } = await sb.from("files").insert({
+      id: upload.id,
+      together_id: togetherId,
+      kind: upload.kind,
+      name: upload.name,
+      mime_type: upload.mimeType,
+      size_bytes: upload.sizeBytes,
+      stored_bytes: upload.storedBytes,
+      key_version: upload.keyVersion,
+      content_mac: upload.contentMac,
+      original_path: path,
+      folder_id: upload.folderId,
+      tags: upload.tags,
+      uploaded_by: meId,
+      ...(upload.takenAt ? { taken_at: upload.takenAt } : {}),
+    });
+    if (error?.code === "23505" && /content_mac/.test(error.message + (error.details ?? ""))) return ok<StartedUpload>({ duplicate: true });
+    if (error?.code === NO_SPACE) return fail("Not enough space left in your Together for this file.");
+    if (error) return fail(message(error, "We couldn't start that upload. Try again."));
+    const signed = await sb.storage.from(FILES_BUCKET).createSignedUploadUrl(path);
+    if (signed.error) {
+      console.error("[supabase] storage", signed.error.message);
+      return fail("We couldn't start that upload. Try again.");
+    }
+    return ok<StartedUpload>({ duplicate: false, target: { path, token: signed.data.token } });
+  }
+
+  async finishUpload({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.rpc("v1_finish_upload", { p_id: id });
+    return error ? notSaved(message(error, "The file didn't arrive whole. Try adding it again.")) : saved;
+  }
+
+  async renameFile({ id, name }: { id: string; name: string }): Promise<MutationResult> {
+    return this.updateFile(id, { name }, "We couldn't rename that file. Try again.");
+  }
+
+  async moveFile({ id, folderId }: { id: string; folderId: string | null }): Promise<MutationResult> {
+    return this.updateFile(id, { folder_id: folderId }, "We couldn't move that file. Try again.");
+  }
+
+  async setFileTags({ id, tags }: { id: string; tags: string[] }): Promise<MutationResult> {
+    return this.updateFile(id, { tags }, "We couldn't save those tags. Try again.");
+  }
+
+  async moveToBin({ id }: { id: string }): Promise<MutationResult> {
+    // the guard trigger sets the real time and who did it
+    return this.updateFile(id, { deleted_at: new Date().toISOString() }, "We couldn't move that to the bin. Try again.");
+  }
+
+  async restoreFile({ id }: { id: string }): Promise<MutationResult> {
+    return this.updateFile(id, { deleted_at: null }, "We couldn't restore that file. Try again.");
+  }
+
+  async createFolder({ name, hue }: { name: string; hue: Hue }): Promise<DataResult<FileFolder>> {
+    const sb = await createClient();
+    const { data, error } = await sb.from("file_folders").insert({ name, hue }).select("id, name, hue").single().overrideTypes<FolderRow, { merge: false }>();
+    if (error?.code === "23505") return fail("There's already a folder with that name.");
+    if (error) return fail(message(error, "We couldn't make that folder. Try again."));
+    return ok({ id: data.id, name: data.name, hue: data.hue });
+  }
+
+  async renameFolder({ id, name }: { id: string; name: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { data, error } = await sb.from("file_folders").update({ name }).eq("id", id).select("id");
+    if (error?.code === "23505") return notSaved("There's already a folder with that name.");
+    if (error) return notSaved(message(error, "We couldn't rename that folder. Try again."));
+    return data?.length ? saved : notSaved("That folder isn't there any more.");
+  }
+
+  async deleteFolder({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const { error } = await sb.from("file_folders").delete().eq("id", id);
+    // triggers/file_folders_only_empty.sql
+    if (error?.code === "23503") return notSaved("Only an empty folder can be deleted. Move or bin its files first.");
+    return error ? notSaved(message(error, "We couldn't delete that folder. Try again.")) : saved;
+  }
+
+  async signedFileUrls({ paths }: { paths: string[] }): Promise<DataResult<SignedFileUrl[]>> {
+    if (!paths.length) return ok([]);
+    const sb = await createClient();
+    const { data, error } = await sb.storage.from(FILES_BUCKET).createSignedUrls(paths, 3600);
+    if (error) {
+      console.error("[supabase] storage", error.message);
+      return fail("We couldn't fetch that file. Try again.");
+    }
+    return ok(data.flatMap((d) => (d.path && d.signedUrl ? [{ path: d.path, url: d.signedUrl }] : [])));
+  }
+
+  private async updateFile(id: string, change: Record<string, unknown>, fallback: string): Promise<MutationResult> {
+    const sb = await createClient();
+    const { data, error } = await sb.from("files").update(change).eq("id", id).eq("status", "ready").select("id");
+    if (error) return notSaved(message(error, fallback));
+    return data?.length ? saved : notSaved("That file isn't there any more.");
   }
 }

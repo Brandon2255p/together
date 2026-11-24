@@ -15,4 +15,6 @@ export interface BrowserBackendService {
    * row-level security lets you see it. Returns the function that stops listening.
    */
   watchTogether(onChange: () => void): () => void;
+  /** sends an encrypted object to Storage with a signed upload from startUpload; the bytes never pass the server */
+  uploadFileObject(params: { path: string; token: string; body: Blob }): Promise<{ error: AuthError | null }>;
 }

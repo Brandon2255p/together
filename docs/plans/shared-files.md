@@ -1,7 +1,9 @@
 # Plan: shared Gallery and Files (photos, videos and documents)
 
-> **Status: steps 1 (Home shortcuts) and 2 (schema, keys, quota, Storage, `lib/files/crypto.ts`) are built; the
-> rest is designed, not built.** The screens are in `design/Together.figcraft` (open it in FigCraft), on the
+> **Status: steps 1 (Home shortcuts), 2 (schema, keys, quota, Storage, `lib/files/crypto.ts`) and 3 (Files: drive,
+> folders, tags, details sheet, encrypted upload with duplicate skip and the space check) are built; the rest is
+> designed, not built.** Until step 5, the Files search box filters the loaded documents in the browser. The Bin button
+> on screens 36 and 39 comes with the Bin screen (step 6). The screens are in `design/Together.figcraft` (open it in FigCraft), on the
 > **📱 Screens** page: the new Home is **05 Home**, and the rest are under **08 — Files: photos, videos & documents**
 > (36–45).
 
