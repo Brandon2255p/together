@@ -125,8 +125,8 @@ export function spaceCheck(usage: Pick<StorageUsage, "quotaBytes" | "usedBytes">
 }
 
 /** "3 files added · 1 skipped" */
-export function uploadSummary(added: number, skipped: number): { title: string; overline: string } {
-  const title = added === 0 ? "Nothing new added" : `${countLabel(added)} added`;
+export function uploadSummary(added: number, skipped: number, noun = "file"): { title: string; overline: string } {
+  const title = added === 0 ? "Nothing new added" : `${countLabel(added, noun)} added`;
   const overline = skipped ? `Upload done · ${skipped} skipped` : "Upload done";
   return { title, overline };
 }

@@ -41,6 +41,9 @@ import type {
   TogetherSummary,
   WishItem,
   Documents,
+  GalleryCursor,
+  GalleryPage,
+  MonthCount,
   DuplicateMatch,
   FileFolder,
   FileKind,
@@ -360,6 +363,16 @@ interface FileRow {
   uploaded_by: string | null;
   created_at: string;
   taken_at: string;
+  thumb_path: string | null;
+  preview_path: string | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+}
+interface MonthRow {
+  year: number;
+  month: number;
+  count: number;
 }
 interface FolderRow {
   id: string;
@@ -383,7 +396,7 @@ interface DuplicateRow {
   in_bin: boolean;
 }
 
-const FILE_SELECT = "id, kind, name, mime_type, size_bytes, stored_bytes, key_version, original_path, folder_id, tags, uploaded_by, created_at, taken_at";
+const FILE_SELECT = "id, kind, name, mime_type, size_bytes, stored_bytes, key_version, original_path, folder_id, tags, uploaded_by, created_at, taken_at, thumb_path, preview_path, width, height, duration_ms";
 const FILES_BUCKET = "files";
 
 const toFile = (row: FileRow): SharedFile => ({
@@ -400,6 +413,11 @@ const toFile = (row: FileRow): SharedFile => ({
   uploadedBy: row.uploaded_by,
   createdAt: row.created_at,
   takenAt: row.taken_at,
+  thumbPath: row.thumb_path,
+  previewPath: row.preview_path,
+  width: row.width,
+  height: row.height,
+  durationMs: row.duration_ms,
 });
 
 /** the quota trigger (triggers/files_quota.sql) raises 53100 with a message that says how much is left */
@@ -1199,6 +1217,45 @@ export class RealServerService implements ServerBackendService {
     return ok({ folders: (folders.data ?? []).map((f): FileFolder => ({ id: f.id, name: f.name, hue: f.hue })), files: (files.data ?? []).map(toFile) });
   }
 
+  async getGallery({ before, limit }: { before: GalleryCursor | null; limit: number }): Promise<DataResult<GalleryPage>> {
+    const sb = await createClient();
+    let query = sb
+      .from("files")
+      .select(FILE_SELECT)
+      .in("kind", ["photo", "video"])
+      .eq("status", "ready")
+      .is("deleted_at", null);
+    // keyset paging on (taken_at, id), as files_gallery_idx is ordered
+    if (before) query = query.or(`taken_at.lt.${before.takenAt},and(taken_at.eq.${before.takenAt},id.lt.${before.id})`);
+    const { data, error } = await query
+      .order("taken_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit + 1)
+      .overrideTypes<FileRow[], { merge: false }>();
+    if (error) return fail(message(error, "We couldn't load your photos. Try again."));
+    const items = data.slice(0, limit).map(toFile);
+    const last = items.at(-1);
+    return ok({ items, next: data.length > limit && last ? { takenAt: last.takenAt, id: last.id } : null });
+  }
+
+  async galleryMonths(): Promise<DataResult<MonthCount[]>> {
+    const sb = await createClient();
+    const [photos, videos] = await Promise.all([sb.rpc("v1_file_months", { p_kinds: ["photo"] }), sb.rpc("v1_file_months", { p_kinds: ["video"] })]);
+    const error = photos.error ?? videos.error;
+    if (error) return fail(message(error, "We couldn't load your photos. Try again."));
+    const months = new Map<string, MonthCount>();
+    const count = (rows: MonthRow[] | null, kind: "photos" | "videos") => {
+      for (const r of rows ?? []) {
+        const m = months.get(`${r.year}-${r.month}`) ?? { year: r.year, month: r.month, photos: 0, videos: 0 };
+        m[kind] = r.count;
+        months.set(`${r.year}-${r.month}`, m);
+      }
+    };
+    count(photos.data as MonthRow[] | null, "photos");
+    count(videos.data as MonthRow[] | null, "videos");
+    return ok([...months.values()].sort((a, b) => b.year - a.year || b.month - a.month));
+  }
+
   async findDuplicates({ macs }: { macs: string[] }): Promise<DataResult<DuplicateMatch[]>> {
     if (!macs.length) return ok([]);
     const sb = await createClient();
@@ -1221,7 +1278,10 @@ export class RealServerService implements ServerBackendService {
     const sb = await createClient();
     const meId = await currentUserId(sb);
     if (!meId) return fail(SIGNED_OUT);
-    const path = `${togetherId}/${upload.id}/original.bin`;
+    const base = `${togetherId}/${upload.id}`;
+    const path = `${base}/original.bin`;
+    const thumbPath = upload.hasThumb ? `${base}/thumb.bin` : null;
+    const previewPath = upload.hasPreview ? `${base}/preview.bin` : null;
     const { error } = await sb.from("files").insert({
       id: upload.id,
       together_id: togetherId,
@@ -1233,6 +1293,11 @@ export class RealServerService implements ServerBackendService {
       key_version: upload.keyVersion,
       content_mac: upload.contentMac,
       original_path: path,
+      thumb_path: thumbPath,
+      preview_path: previewPath,
+      width: upload.width,
+      height: upload.height,
+      duration_ms: upload.kind === "video" ? upload.durationMs : null,
       folder_id: upload.folderId,
       tags: upload.tags,
       uploaded_by: meId,
@@ -1241,12 +1306,18 @@ export class RealServerService implements ServerBackendService {
     if (error?.code === "23505" && /content_mac/.test(error.message + (error.details ?? ""))) return ok<StartedUpload>({ duplicate: true });
     if (error?.code === NO_SPACE) return fail("Not enough space left in your Together for this file.");
     if (error) return fail(message(error, "We couldn't start that upload. Try again."));
-    const signed = await sb.storage.from(FILES_BUCKET).createSignedUploadUrl(path);
-    if (signed.error) {
-      console.error("[supabase] storage", signed.error.message);
+    const bucket = sb.storage.from(FILES_BUCKET);
+    const signed = await Promise.all([path, thumbPath, previewPath].map((p) => (p ? bucket.createSignedUploadUrl(p) : Promise.resolve(null))));
+    const failed = signed.find((s) => s?.error)?.error;
+    if (failed) {
+      console.error("[supabase] storage", failed.message);
       return fail("We couldn't start that upload. Try again.");
     }
-    return ok<StartedUpload>({ duplicate: false, target: { path, token: signed.data.token } });
+    const target = (i: number) => {
+      const s = signed[i];
+      return s?.data ? { path: s.data.path, token: s.data.token } : null;
+    };
+    return ok<StartedUpload>({ duplicate: false, target: target(0)!, thumb: target(1), preview: target(2) });
   }
 
   async finishUpload({ id }: { id: string }): Promise<MutationResult> {

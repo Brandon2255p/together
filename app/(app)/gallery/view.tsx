@@ -1,9 +1,10 @@
 "use client";
 
-import { ComingSoonScreen } from "@/components/files/coming-soon-screen";
+import { GalleryScreen } from "@/components/files/gallery-screen";
+import type { Gallery, Together } from "@/lib/models";
 import { useGalleryViewModel } from "./view-model";
 
-export function GalleryView() {
-  const vm = useGalleryViewModel();
-  return <ComingSoonScreen {...vm} />;
+export function GalleryView({ together, gallery }: { together: Together; gallery: Gallery }) {
+  const vm = useGalleryViewModel(gallery, together);
+  return <GalleryScreen {...vm} />;
 }

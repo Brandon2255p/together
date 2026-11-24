@@ -56,7 +56,7 @@ export function UploadSheet({ upload, restoring, error, onRestore, onClose }: Up
         <>
           {upload.skipped.length ? (
             <div className="flex flex-col gap-3 rounded-card bg-surface-muted p-4">
-              <p className="text-callout">These were already in Files, so we didn&apos;t add them twice.</p>
+              <p className="text-callout">These were already in your Together, so we didn&apos;t add them twice.</p>
               <ul className="flex flex-col gap-3">
                 {upload.skipped.map((s) => (
                   <li key={s.name} className="flex items-center gap-3">

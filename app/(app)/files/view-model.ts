@@ -3,49 +3,28 @@
 import { useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import {
-  createFolder,
-  deleteFolder,
-  filesKeys,
-  findDuplicates,
-  finishUpload,
-  getDocuments,
-  moveFile,
-  moveToBin,
-  renameFile,
-  renameFolder,
-  restoreFile,
-  setFileTags,
-  signedFileUrls,
-  startUpload,
-  storageUsage,
-} from "@/lib/actions/files";
-import { browserBackend } from "@/lib/backend/browser";
-import { contentMac, decryptFile, encryptedSize, encryptFile } from "@/lib/files/crypto";
-import { keyring, type Keyring } from "@/lib/files/client/keyring";
+import { createFolder, deleteFolder, getDocuments, moveFile, moveToBin, renameFile, renameFolder, setFileTags, signedFileUrls } from "@/lib/actions/files";
+import { decryptFile } from "@/lib/files/crypto";
 import { openPendingTab, saveBlob, showInTab } from "@/lib/files/client/save";
 import {
   addedByName,
   countLabel,
   dateAndTime,
-  dayAndMonth,
   fileMeta,
   filterDocuments,
   folderCounts,
   formatBytes,
   normaliseTags,
-  spaceCheck,
   tagLabel,
   topTags,
   typeLabel,
   typeTone,
-  uploadSummary,
 } from "@/lib/files/documents";
 import type { Documents, Hue, SharedFile, Together } from "@/lib/models";
 import type { DocumentsScreenProps } from "@/components/files/documents-screen";
 import type { DocumentSheetProps } from "@/components/files/document-sheet";
 import type { FolderSheetData } from "@/components/files/folder-sheet";
-import type { SkippedFileData, UploadSheetData } from "@/components/files/upload-sheet";
+import { asDocument, togetherKeys, useFileUpload } from "../_lib/use-file-upload";
 import { useServerState } from "../_lib/server-state";
 
 const folderHref = (id: string) => `/files/folders/${id}` as Route;
@@ -60,15 +39,11 @@ export function useDocumentsViewModel(initial: Documents, together: Together, fo
   const [docs, setDocs] = useServerState(initial);
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [sheetBusy, setSheetBusy] = useState<DocumentSheetProps["busy"]>(null);
   const [sheetError, setSheetError] = useState<string | null>(null);
 
-  const [upload, setUpload] = useState<UploadSheetData | null>(null);
-  const [restoring, setRestoring] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [folderSheet, setFolderSheet] = useState<FolderSheetData | null>(null);
   const [folderPending, setFolderPending] = useState(false);
@@ -81,8 +56,20 @@ export function useDocumentsViewModel(initial: Documents, together: Together, fo
   const counts = folderCounts(docs.files);
   const open = docs.files.find((f) => f.id === openId) ?? null;
 
-  // the keys load on first use, then stay in memory for this tab
-  const getKeys = (): Promise<Keyring> => keyring(together.id, () => filesKeys());
+  const uploader = useFileUpload({
+    together,
+    folderId,
+    prepare: () => Promise.resolve(asDocument()),
+    noun: () => "file",
+    onAdded: (added) => {
+      setDocs((d) => ({ ...d, files: [...[...added].reverse(), ...d.files] }));
+      router.refresh();
+    },
+    onRestored: async () => {
+      const fresh = await getDocuments();
+      if (fresh.data) setDocs(fresh.data);
+    },
+  });
 
   const changeFile = (id: string, change: Partial<SharedFile>) =>
     setDocs((d) => ({ ...d, files: d.files.map((f) => (f.id === id ? { ...f, ...change } : f)) }));
@@ -101,7 +88,7 @@ export function useDocumentsViewModel(initial: Documents, together: Together, fo
   }
 
   async function fetchPlain(file: SharedFile): Promise<Blob> {
-    const [ring, urls] = await Promise.all([getKeys(), signedFileUrls([file.originalPath])]);
+    const [ring, urls] = await Promise.all([togetherKeys(together.id), signedFileUrls([file.originalPath])]);
     const url = urls.data?.[0]?.url;
     if (!url) throw new Error(urls.error ?? "We couldn't fetch that file. Try again.");
     const response = await fetch(url);
@@ -137,132 +124,6 @@ export function useDocumentsViewModel(initial: Documents, together: Together, fo
     if (!result.success) return setSheetError(result.error ?? TRY_AGAIN);
     setOpenId(null);
     setDocs((d) => ({ ...d, files: d.files.filter((f) => f.id !== file.id) }));
-  }
-
-  async function uploadFiles(picked: File[]) {
-    if (upload?.stage === "working") return;
-    setUploadError(null);
-    setError(null);
-    const total = picked.length;
-    const working = (detail: string, done = 0): UploadSheetData => ({ stage: "working", title: `Adding ${countLabel(total)}`, detail, done, total });
-    setUpload(working("Checking for copies…"));
-    try {
-      const ring = await getKeys();
-      // the fingerprint of each file: equal files match within this Together only
-      const macs = await Promise.all(picked.map((file) => contentMac(file, ring.active)));
-      const seen = new Set<string>();
-      const fresh: { file: File; mac: string }[] = [];
-      const skipped: SkippedFileData[] = [];
-      picked.forEach((file, i) => {
-        const mac = macs[i]!;
-        if (seen.has(mac)) skipped.push({ name: file.name, detail: "The same file was picked twice", restoreId: null });
-        else fresh.push({ file, mac });
-        seen.add(mac);
-      });
-
-      const dupes = await findDuplicates(fresh.map((f) => f.mac));
-      if (dupes.error) throw new Error(dupes.error);
-      const known = new Map((dupes.data ?? []).map((d) => [d.contentMac, d]));
-      const toSend = fresh.filter(({ file, mac }) => {
-        const match = known.get(mac);
-        if (!match) return true;
-        const who = match.uploadedByName === people.find((p) => p.id === together.meId)?.name ? "You" : (match.uploadedByName ?? "Someone");
-        const when = dayAndMonth(match.createdAt);
-        skipped.push({ name: file.name, detail: match.inBin ? `In the bin · ${who} added it · ${when}` : `${who} added it · ${when}`, restoreId: match.inBin ? match.fileId : null });
-        return false;
-      });
-
-      const usage = await storageUsage();
-      if (!usage.data) throw new Error(usage.error ?? TRY_AGAIN);
-      const space = spaceCheck(usage.data, toSend.map(({ file }) => encryptedSize(file.size)));
-      if (!space.fits) {
-        setUpload({ stage: "blocked", title: "Not enough space", message: space.message });
-        return;
-      }
-
-      const added: SharedFile[] = [];
-      const failed: string[] = [];
-      for (const [i, { file, mac }] of toSend.entries()) {
-        setUpload(working(`Encrypting and uploading ${file.name}`, i));
-        const id = crypto.randomUUID();
-        const sealed = await encryptFile(file, ring.active, id);
-        const mimeType = file.type || "application/octet-stream";
-        const started = await startUpload(together.id, {
-          id,
-          kind: "document",
-          name: file.name,
-          mimeType,
-          sizeBytes: file.size,
-          storedBytes: sealed.size,
-          keyVersion: ring.active.version,
-          contentMac: mac,
-          folderId,
-          tags: [],
-          takenAt: null,
-        });
-        if (!started.data) {
-          // space runs out part way: the rest won't fit either
-          if (started.error?.startsWith("Not enough space")) {
-            failed.push(...toSend.slice(i).map((f) => f.file.name));
-            setUploadError(started.error);
-            break;
-          }
-          failed.push(file.name);
-          continue;
-        }
-        if (started.data.duplicate) {
-          skipped.push({ name: file.name, detail: "Someone added it just now", restoreId: null });
-          continue;
-        }
-        const sent = await browserBackend.uploadFileObject({ path: started.data.target.path, token: started.data.target.token, body: sealed });
-        const finished = sent.error ? { success: false } : await finishUpload(id);
-        if (!finished.success) {
-          failed.push(file.name);
-          continue;
-        }
-        const now = new Date().toISOString();
-        added.push({
-          id,
-          kind: "document",
-          name: file.name,
-          mimeType,
-          sizeBytes: file.size,
-          storedBytes: sealed.size,
-          keyVersion: ring.active.version,
-          originalPath: started.data.target.path,
-          folderId,
-          tags: [],
-          uploadedBy: together.meId,
-          createdAt: now,
-          takenAt: now,
-        });
-      }
-
-      setDocs((d) => ({ ...d, files: [...added.reverse(), ...d.files] }));
-      const summary = uploadSummary(added.length, skipped.length);
-      setUpload({ stage: "done", overline: summary.overline, title: summary.title, skipped, failed });
-      if (added.length) router.refresh();
-    } catch (e) {
-      setUpload(null);
-      setError(e instanceof Error ? e.message : "We couldn't add those files. Try again.");
-    }
-  }
-
-  async function restore(fileId: string) {
-    if (restoring) return;
-    setRestoring(fileId);
-    setUploadError(null);
-    const result = await restoreFile(fileId);
-    if (!result.success) {
-      setRestoring(null);
-      return setUploadError(result.error ?? TRY_AGAIN);
-    }
-    const fresh = await getDocuments();
-    setRestoring(null);
-    if (fresh.data) setDocs(fresh.data);
-    setUpload((u) =>
-      u?.stage === "done" ? { ...u, skipped: u.skipped.map((s) => (s.restoreId === fileId ? { ...s, detail: "Restored from the bin ✓", restoreId: null } : s)) } : u,
-    );
   }
 
   async function makeFolder(name: string, hue: Hue) {
@@ -347,9 +208,9 @@ export function useDocumentsViewModel(initial: Documents, together: Together, fo
       setSheetError(null);
       setOpenId(id);
     },
-    onUpload: (files) => void uploadFiles(files),
-    uploading: upload?.stage === "working",
-    error,
+    onUpload: uploader.start,
+    uploading: uploader.working,
+    error: uploader.error,
     documentSheet: {
       file: open
         ? {
@@ -384,13 +245,7 @@ export function useDocumentsViewModel(initial: Documents, together: Together, fo
       },
       onBin: () => void bin(),
     },
-    uploadSheet: {
-      upload,
-      restoring,
-      error: uploadError,
-      onRestore: (id) => void restore(id),
-      onClose: () => setUpload(null),
-    },
+    uploadSheet: uploader.sheet,
     folderSheet: {
       sheet: folderSheet,
       pending: folderPending,

@@ -34,7 +34,10 @@ import type {
   DuplicateMatch,
   FileFolder,
   FilesKey,
+  GalleryCursor,
+  GalleryPage,
   Hue,
+  MonthCount,
   NewUpload,
   SignedFileUrl,
   StartedUpload,
@@ -43,7 +46,8 @@ import type {
 import { stubAutocomplete, stubFindPlace, stubGetPlace } from "@/lib/backend/services/stub/google";
 import { BRANDON, blankState, type StubChallenge } from "@/lib/backend/services/stub/seed";
 import { state, world } from "@/lib/backend/services/stub/state";
-import { duplicateMatches, filesOf, newRow, normaliseTags, objectPath, QUOTA_BYTES, signUpload, stubStorage, toSharedFile, type StubFiles } from "@/lib/backend/services/stub/files";
+import { monthOf } from "@/lib/files/gallery";
+import { duplicateMatches, filesOf, newRow, normaliseTags, QUOTA_BYTES, signUpload, stubStorage, toSharedFile, type StubFiles } from "@/lib/backend/services/stub/files";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis): every
 // Together it knows, and which one is open. state() is the open Together's data.
@@ -775,6 +779,37 @@ export class StubServerService implements ServerBackendService {
     });
   }
 
+  async getGallery({ before, limit }: { before: GalleryCursor | null; limit: number }) {
+    await wait();
+    log("getGallery", { before: before?.takenAt ?? null, limit });
+    const files = await this.myFiles();
+    if (!files) return fail<GalleryPage>(NO_TOGETHER);
+    const shown = files.files
+      .filter((f) => f.kind !== "document" && f.status === "ready" && !f.deletedAt)
+      .sort((a, b) => b.takenAt.localeCompare(a.takenAt) || b.id.localeCompare(a.id))
+      .filter((f) => !before || f.takenAt < before.takenAt || (f.takenAt === before.takenAt && f.id < before.id));
+    const items = shown.slice(0, limit).map(toSharedFile);
+    const last = items.at(-1);
+    return ok<GalleryPage>({ items, next: shown.length > limit && last ? { takenAt: last.takenAt, id: last.id } : null });
+  }
+
+  async galleryMonths() {
+    await wait();
+    log("galleryMonths");
+    const files = await this.myFiles();
+    if (!files) return fail<MonthCount[]>(NO_TOGETHER);
+    const months = new Map<string, MonthCount>();
+    for (const f of files.files) {
+      if (f.kind === "document" || f.status !== "ready" || f.deletedAt) continue;
+      const { year, month } = monthOf(f.takenAt);
+      const m = months.get(`${year}-${month}`) ?? { year, month, photos: 0, videos: 0 };
+      if (f.kind === "photo") m.photos++;
+      else m.videos++;
+      months.set(`${year}-${month}`, m);
+    }
+    return ok([...months.values()].sort((a, b) => b.year - a.year || b.month - a.month));
+  }
+
   async findDuplicates({ macs }: { macs: string[] }) {
     await wait();
     log("findDuplicates", { count: macs.length });
@@ -794,9 +829,10 @@ export class StubServerService implements ServerBackendService {
     if (upload.folderId && !files.folders.some((f) => f.id === upload.folderId)) return fail<StartedUpload>("That folder isn't there any more.");
     const used = files.files.reduce((sum, f) => sum + f.storedBytes, 0);
     if (used + upload.storedBytes > QUOTA_BYTES) return fail<StartedUpload>("Not enough space left in your Together for this file.");
-    files.files.unshift(newRow(togetherId, upload, ME));
-    const path = objectPath(togetherId, upload.id);
-    return ok<StartedUpload>({ duplicate: false, target: { path, token: signUpload(path) } });
+    const row = newRow(togetherId, upload, ME);
+    files.files.unshift(row);
+    const sign = (path: string | null) => (path ? { path, token: signUpload(path) } : null);
+    return ok<StartedUpload>({ duplicate: false, target: sign(row.originalPath)!, thumb: sign(row.thumbPath), preview: sign(row.previewPath) });
   }
 
   async finishUpload({ id: fileId }: { id: string }) {
@@ -804,8 +840,10 @@ export class StubServerService implements ServerBackendService {
     log("finishUpload", { id: fileId });
     const file = (await this.myFiles())?.files.find((f) => f.id === fileId);
     if (!file || file.uploadedBy !== ME || file.status !== "uploading") return notDone("That upload isn't there any more.");
-    const bytes = stubStorage.get(file.originalPath);
-    if (!bytes || bytes.length > file.storedBytes) return notDone("The file didn't arrive whole. Try adding it again.");
+    const parts = [file.originalPath, file.thumbPath, file.previewPath].filter((p) => p !== null).map((p) => stubStorage.get(p));
+    const size = parts.reduce((sum, b) => sum + (b?.length ?? 0), 0);
+    if (parts.some((b) => !b) || size > file.storedBytes) return notDone("The file didn't arrive whole. Try adding it again.");
+    file.storedBytes = size;
     file.status = "ready";
     return done;
   }
