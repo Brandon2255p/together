@@ -31,7 +31,8 @@ import dynamic from "next/dynamic";
 import type { Member, TogetherSummary } from "@/lib/models";
 import { clusterExtent, layoutBubbles } from "@/lib/together/bubbles";
 import { MemberRow } from "@/components/together/member-row";
-import { SwitcherPill } from "@/components/together/switcher-pill";
+import { ShortcutCard } from "@/components/home/shortcut-card";
+import { ArrowLeftRightIcon, UsersIcon } from "lucide-react";
 
 const BRANDON: Member = { id: "b", name: "Brandon", initial: "B", tone: "accent", role: "owner" };
 const ADELE: Member = { id: "a", name: "Adele", initial: "A", tone: "partner", role: "member" };
@@ -263,10 +264,10 @@ export function DesignSystemScreen(p: DesignSystemScreenProps) {
         <Label>Member Row</Label>
         <MemberRow member={BRANDON} detail="You" />
         <MemberRow member={ADELE} onActions={() => p.onSheetOpenChange(true)} />
-        <Label>Switcher pill</Label>
-        <div className="flex gap-2">
-          <SwitcherPill name="Brandon & Adele" tone="accent" hasNews={false} href="/design-system" />
-          <SwitcherPill name="Family" tone="partner" hasNews href="/design-system" />
+        <Label>Home shortcut cards (Switch has a dot when another Together has news)</Label>
+        <div className="grid w-64 grid-cols-2 gap-2.5">
+          <ShortcutCard href="/design-system" icon={<ArrowLeftRightIcon aria-hidden />} tone="partner" label="Switch" dot />
+          <ShortcutCard href="/design-system" icon={<UsersIcon aria-hidden />} tone="accent" label="Manage" />
         </div>
         <Label>Bubble scene (drag to spin)</Label>
         <div className="h-80 overflow-hidden rounded-card bg-surface-muted">

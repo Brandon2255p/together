@@ -1,10 +1,10 @@
 "use client";
 
 import { TogetherScreen } from "@/components/together/together-screen";
-import type { Together } from "@/lib/models";
+import type { StorageUsage, Together } from "@/lib/models";
 import { useTogetherViewModel } from "./view-model";
 
-export function TogetherView({ together }: { together: Together }) {
-  const vm = useTogetherViewModel(together);
+export function TogetherView({ together, usage }: { together: Together; usage: StorageUsage | null }) {
+  const vm = useTogetherViewModel(together, usage);
   return <TogetherScreen {...vm} />;
 }

@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { leaveTogether, newInviteCode, removeMember, renameTogether, setMemberRole } from "@/lib/actions/together";
-import type { Member, Together } from "@/lib/models";
+import { usageView } from "@/lib/files/usage";
+import type { Member, StorageUsage, Together } from "@/lib/models";
 import { codeBoxes, expiryLabel, inviteMessage, isExpired, joinUrl, spacedCode } from "@/lib/together/invite";
 import type { MemberRowData } from "@/components/together/together-screen";
 
 const peopleCount = (n: number) => (n === 1 ? "Just you" : `${n} people`);
 
-export function useTogetherViewModel(initial: Together) {
+export function useTogetherViewModel(initial: Together, usage: StorageUsage | null) {
   const router = useRouter();
   const [together, setTogether] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -184,6 +185,7 @@ export function useTogetherViewModel(initial: Together) {
   return {
     name: together.name,
     summary: peopleCount(together.members.length),
+    storage: usage ? usageView(usage) : null,
     back: "/home" as Route,
     members,
     inviteCode: spacedCode(together.inviteCode),

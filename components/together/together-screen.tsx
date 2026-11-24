@@ -6,7 +6,9 @@ import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
 import { ChevronLeftIcon, CopyIcon, HeartIcon, LogOutIcon, PencilIcon, ShareIcon, UserPlusIcon } from "lucide-react";
 import type { Member } from "@/lib/models";
+import type { UsageView } from "@/lib/files/usage";
 import { MemberRow } from "@/components/together/member-row";
+import { PrivacyCard, StorageCard } from "@/components/together/storage-card";
 import { Button } from "@/components/ui/button";
 import { iconButtonVariants } from "@/components/ui/icon-button";
 import { InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
@@ -41,6 +43,8 @@ export interface TogetherScreenProps {
   name: string;
   /** "3 people" */
   summary: string;
+  /** the shared space for photos, videos and files; null when it couldn't load */
+  storage: UsageView | null;
   back: Route;
   members: MemberRowData[];
   /** "K7Q · 29X" */
@@ -145,6 +149,13 @@ export function TogetherScreen(props: TogetherScreenProps) {
             {inviteExpired ? "New code" : "Share"}
           </Button>
         </div>
+      </RevealItem>
+
+      <RevealItem className="flex flex-col gap-3">
+        <SectionHeader title="Storage" />
+        {props.storage ? <StorageCard usage={props.storage} /> : <p className="text-callout text-ink-muted">Storage use couldn&apos;t load just now.</p>}
+        <SectionHeader title="Privacy" className="mt-2" />
+        <PrivacyCard />
       </RevealItem>
 
       <RevealItem>

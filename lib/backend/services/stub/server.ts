@@ -47,6 +47,7 @@ import { stubAutocomplete, stubFindPlace, stubGetPlace } from "@/lib/backend/ser
 import { BRANDON, blankState, type StubChallenge } from "@/lib/backend/services/stub/seed";
 import { state, world } from "@/lib/backend/services/stub/state";
 import { monthOf } from "@/lib/files/gallery";
+import { canAddTogether, TOO_MANY_TOGETHERS } from "@/lib/together/limits";
 import { duplicateMatches, filesOf, newRow, normaliseTags, QUOTA_BYTES, signUpload, stubStorage, toSharedFile, type StubFiles } from "@/lib/backend/services/stub/files";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis): every
@@ -129,6 +130,7 @@ export class StubServerService implements ServerBackendService {
   async createTogether({ name }: { name: string }) {
     await wait();
     log("createTogether", { name });
+    if (!canAddTogether(mine().length)) return fail<Together>(TOO_MANY_TOGETHERS);
     const w = world();
     const togetherId = `t-${100 + Object.keys(w.togethers).length}`;
     const together: Together = {
@@ -204,6 +206,7 @@ export class StubServerService implements ServerBackendService {
     if (!target || !together) return fail<Together>("That code didn't work. Check it with whoever sent it and try again.");
     if (!together.members.some((m) => m.id === ME)) {
       if (Date.parse(together.inviteExpiresAt) < Date.now()) return fail<Together>("That code has expired. Ask for a new one.");
+      if (!canAddTogether(mine().length)) return fail<Together>(TOO_MANY_TOGETHERS);
       const before = together.formerMembers.find((m) => m.id === ME);
       together.formerMembers = together.formerMembers.filter((m) => m.id !== ME);
       const count = together.members.length + together.formerMembers.length;

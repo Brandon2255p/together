@@ -3,12 +3,23 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
-import { CalendarDaysIcon, ClockIcon, FolderIcon, ImagesIcon, MapPinIcon, PartyPopperIcon, ShoppingBagIcon, TargetIcon, UserRoundIcon } from "lucide-react";
-import type { Member, MemberTone } from "@/lib/models";
+import {
+  ArrowLeftRightIcon,
+  CalendarDaysIcon,
+  ClockIcon,
+  FolderIcon,
+  ImagesIcon,
+  MapPinIcon,
+  PartyPopperIcon,
+  ShoppingBagIcon,
+  TargetIcon,
+  UserPlusIcon,
+  UserRoundIcon,
+  UsersIcon,
+} from "lucide-react";
+import type { Member } from "@/lib/models";
 import { Flame } from "@/components/challenges/art";
 import { ShortcutCard } from "@/components/home/shortcut-card";
-import { ManagePill } from "@/components/together/manage-pill";
-import { SwitcherPill } from "@/components/together/switcher-pill";
 import { AddChoreSheet, type AddChoreSheetProps } from "@/components/lists/add-chore-sheet";
 import { ChoreRow, type ChoreRowData } from "@/components/lists/chore-row";
 import { AvatarStack } from "@/components/ui/avatar";
@@ -21,8 +32,8 @@ export interface HomeScreenProps {
   greeting: string;
   dateLabel: string;
   members: Member[];
-  /** the switcher pill: the current Together, and whether another one has news */
-  switcher: { name: string; tone: MemberTone; hasNews: boolean };
+  /** the current Together, and whether another one has news (a dot on Switch) */
+  switcher: { name: string; hasNews: boolean };
   /** the flame pill: the longest challenge streak going, and whether one needs a booster */
   streak: { count: number; atRisk: boolean };
   upNext: { title: string; when: string; where: string | null; people: Member[] } | null;
@@ -51,15 +62,12 @@ function Tile({ href, icon, tone, count, label }: { href: Route; icon: React.Rea
 
 export function HomeScreen(props: HomeScreenProps) {
   const { greeting, dateLabel, members, switcher, streak, upNext, dueToday, onChoreDoneChange, onChoreOpen, choreSheet, toBuy, wantToGo, links, error } = props;
+  const alone = members.length <= 1;
   return (
     <Reveal className="flex flex-col gap-5">
       <RevealItem className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <SwitcherPill {...switcher} href={links.togethers} className="min-w-0" />
-          <ManagePill name={switcher.name} members={members} href={links.together} />
-        </div>
         <ScreenHeader
-          eyebrow={dateLabel}
+          eyebrow={`${dateLabel} · ${switcher.name}`}
           title={greeting}
           actions={
             <>
@@ -135,11 +143,26 @@ export function HomeScreen(props: HomeScreenProps) {
       </RevealItem>
 
       <RevealItem>
-        <nav aria-label="Go to" className="flex gap-2.5">
+        <nav aria-label="Go to" className="grid grid-cols-3 gap-2.5">
           <ShortcutCard href={links.calendar} icon={<CalendarDaysIcon aria-hidden />} tone="accent" label="Calendar" />
           <ShortcutCard href={links.challenges} icon={<TargetIcon aria-hidden />} tone="warning" label="Challenges" />
           <ShortcutCard href={links.gallery} icon={<ImagesIcon aria-hidden />} tone="partner" label="Gallery" />
           <ShortcutCard href={links.files} icon={<FolderIcon aria-hidden />} tone="success" label="Files" />
+          <ShortcutCard
+            href={links.togethers}
+            icon={<ArrowLeftRightIcon aria-hidden />}
+            tone="partner"
+            label="Switch"
+            ariaLabel={`Switch Together: you're in ${switcher.name}${switcher.hasNews ? ", and there's something new in another one" : ""}. Start or join one here too.`}
+            dot={switcher.hasNews}
+          />
+          <ShortcutCard
+            href={links.together}
+            icon={alone ? <UserPlusIcon aria-hidden /> : <UsersIcon aria-hidden />}
+            tone="accent"
+            label={alone ? "Invite" : "Manage"}
+            ariaLabel={`${alone ? "Invite someone to" : "Manage"} ${switcher.name}: members, invite code, name and storage`}
+          />
         </nav>
       </RevealItem>
 

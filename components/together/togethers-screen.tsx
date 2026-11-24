@@ -36,6 +36,8 @@ export interface TogethersScreenProps {
   onCreate: () => void;
   pending: boolean;
   error: string | null;
+  /** set when you're in as many Togethers as you can be: why Join and Start are off */
+  atLimit: string | null;
 }
 
 /** a bubble without three.js: the same gradient as a flat circle */
@@ -62,12 +64,12 @@ function FlatBubble({ bubble, onPick, opening }: { bubble: Bubble; onPick: (id: 
 
 /** Screen 17: every Together you're in, as bubbles sized by recent activity. Tap one to switch to it. */
 export function TogethersScreen(props: TogethersScreenProps) {
-  const { back, bubbles, extent, opening, onPick, sheet, onSheetChange, pending, error } = props;
+  const { back, bubbles, extent, opening, onPick, sheet, onSheetChange, pending, error, atLimit } = props;
   const reduced = useReducedMotion();
   const openingBubble = bubbles.find((b) => b.id === opening);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-h-[calc(100dvh-3rem)] flex-col gap-5">
       {openingBubble ? <OpeningOverlay name={openingBubble.name} colors={TONE_COLORS[openingBubble.tone]} /> : null}
       <Link href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface", size: "md" })}>
         <ChevronLeftIcon aria-hidden />
@@ -83,7 +85,7 @@ export function TogethersScreen(props: TogethersScreenProps) {
         </div>
       ) : (
         <>
-          <div className="relative -mx-5 h-[min(62dvh,520px)]" aria-hidden>
+          <div className="relative -mx-5 h-[min(50dvh,460px)]" aria-hidden>
             <BubbleScene bubbles={bubbles} extent={extent} onPick={onPick} />
           </div>
           {/* the canvas is for looking at; these are for keyboards and screen readers */}
@@ -100,17 +102,20 @@ export function TogethersScreen(props: TogethersScreenProps) {
         </>
       )}
 
-      <InlineError>{sheet ? null : error}</InlineError>
-
-      <div className="flex gap-2">
-        <Button variant="outline" size="md" className="flex-1" onClick={() => onSheetChange("join")}>
-          <LinkIcon className="size-4" aria-hidden />
-          Join with a code
-        </Button>
-        <Button size="md" className="flex-1" onClick={() => onSheetChange("create")}>
-          <PlusIcon className="size-4" aria-hidden />
-          Start a new one
-        </Button>
+      {/* pinned to the bottom of the screen, so they're there however tall the bubbles are */}
+      <div className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] mt-auto flex flex-col gap-2 bg-bg pt-2">
+        <InlineError>{sheet ? null : error}</InlineError>
+        {atLimit ? <p className="text-center text-caption text-ink-muted">{atLimit}</p> : null}
+        <div className="flex gap-2">
+          <Button variant="outline" size="md" className="flex-1" disabled={atLimit !== null} onClick={() => onSheetChange("join")}>
+            <LinkIcon className="size-4" aria-hidden />
+            Join one
+          </Button>
+          <Button size="md" className="flex-1" disabled={atLimit !== null} onClick={() => onSheetChange("create")}>
+            <PlusIcon className="size-4" aria-hidden />
+            Start new
+          </Button>
+        </div>
       </div>
 
       <Sheet open={sheet === "join"} onOpenChange={(open) => onSheetChange(open ? "join" : null)} title="Join a Together">

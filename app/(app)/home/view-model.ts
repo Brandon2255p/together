@@ -16,7 +16,7 @@ export interface HomeViewData {
   wantToGo: number;
   /** today onwards, for "Up next" */
   events: CalendarEvent[];
-  /** all your Togethers, for the switcher pill */
+  /** all your Togethers, for the dot on Switch */
   togethers: TogetherSummary[];
   /** for the flame pill: the longest streak going */
   challenges: Challenge[];
@@ -66,7 +66,6 @@ export function useHomeViewModel(data: HomeViewData) {
     members: together.members,
     switcher: {
       name: together.name,
-      tone: me?.tone ?? "accent",
       hasNews: data.togethers.some((t) => !t.current && t.hasNews),
     },
     streak: {

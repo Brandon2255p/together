@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createTogether, joinTogether, switchTogether } from "@/lib/actions/together";
 import type { TogetherSummary } from "@/lib/models";
 import { clusterExtent, layoutBubbles } from "@/lib/together/bubbles";
+import { canAddTogether, MAX_TOGETHERS } from "@/lib/together/limits";
 
 export function useTogethersViewModel(togethers: TogetherSummary[]) {
   const router = useRouter();
@@ -96,5 +97,6 @@ export function useTogethersViewModel(togethers: TogetherSummary[]) {
     onCreate: () => void create(),
     pending,
     error,
+    atLimit: canAddTogether(togethers.length) ? null : `You can be in ${MAX_TOGETHERS} Togethers at most. Leave one to start or join another.`,
   };
 }
