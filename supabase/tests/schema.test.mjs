@@ -599,5 +599,17 @@ check("emptying the bin counts what was in it", (await one("hal", "select public
 check("…and marks it for the purge", (await db.query("select deleted_at < now() - interval '29 days' old from public.files where id = $1", [vid])).rows[0].old === true);
 check("realtime covers files and folders", (await db.query("select count(*)::int n from pg_publication_tables where pubname = 'supabase_realtime' and tablename in ('files', 'file_folders')")).rows[0].n === 2);
 
+// at most 2 Togethers per person
+const memberships = async (u) => (await db.query("select count(*)::int n from public.together_members where profile_id = $1 and left_at is null", [U[u]])).rows[0].n;
+const tI2 = (await one("ivy", "select public.v2_create_together('Ivy two') id")).id;
+check("a second Together is fine", (await memberships("ivy")) === 2);
+await fails("a third Together can't be started", "ivy", "select public.v2_create_together('Ivy three')", [], /2 Togethers at most/);
+check("…and nothing is left half-made", (await db.query("select count(*)::int n from public.togethers where name = 'Ivy three'")).rows[0].n === 0);
+const gCode = (await db.query("select invite_code from public.togethers where id = $1", [tG])).rows[0].invite_code;
+await db.exec(`update public.togethers set invite_expires_at = now() + interval '1 day' where id = '${tG}'`);
+await fails("a third Together can't be joined", "ivy", "select public.v2_join_together($1)", [gCode], /2 Togethers at most/);
+await as("ivy", "select public.v1_leave_together()");
+check("leaving one frees a place", (await one("ivy", "select public.v2_join_together($1) id", [gCode])).id === tG && (await memberships("ivy")) === 2);
+
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);
