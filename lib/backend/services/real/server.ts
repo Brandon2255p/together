@@ -57,7 +57,7 @@ import type {
 import { PERIOD_NOUN, periodStartOf, summarize } from "@/lib/challenges/streak";
 import { addDays, todayKey } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
-import { objectSizes, signDownloads, signUpload } from "@/lib/backend/services/real/file-store";
+import { deleteObjects, objectSizes, signDownloads, signUpload } from "@/lib/backend/services/real/file-store";
 import { autocomplete, findPlaceId, getPlace as getGooglePlaceDetails } from "@/lib/google/places";
 
 // The Supabase implementation. Every call runs as the signed-in user, so row-level security (supabase/schemas) decides
@@ -1283,7 +1283,7 @@ export class RealServerService implements ServerBackendService {
     const path = `${base}/original.bin`;
     const thumbPath = upload.thumbBytes ? `${base}/thumb.bin` : null;
     const previewPath = upload.previewBytes ? `${base}/preview.bin` : null;
-    const { error } = await sb.from("files").insert({
+    const row = {
       id: upload.id,
       together_id: togetherId,
       kind: upload.kind,
@@ -1303,8 +1303,20 @@ export class RealServerService implements ServerBackendService {
       tags: upload.tags,
       uploaded_by: meId,
       ...(upload.takenAt ? { taken_at: upload.takenAt } : {}),
-    });
-    if (error?.code === "23505" && /content_mac/.test(error.message + (error.details ?? ""))) return ok<StartedUpload>({ duplicate: true });
+    };
+    const isCopy = (e: { code?: string; message: string; details?: string | null } | null) =>
+      e?.code === "23505" && /content_mac/.test(e.message + (e.details ?? ""));
+    let { error } = await sb.from("files").insert(row);
+    if (isCopy(error)) {
+      // the copy in the way may be an upload that never finished (yours, or anyone's past its URLs' life): clear it
+      // and try once more; a real copy, finished or in the bin, stays a duplicate
+      const released = await sb.rpc("v1_release_stuck_upload", { p_mac: upload.contentMac });
+      const paths = (released.data as string[] | null) ?? [];
+      if (released.error || !paths.length) return ok<StartedUpload>({ duplicate: true });
+      await this.forgetObjects(paths);
+      ({ error } = await sb.from("files").insert(row));
+      if (isCopy(error)) return ok<StartedUpload>({ duplicate: true });
+    }
     if (error?.code === NO_SPACE) return fail("Not enough space left in your Together for this file.");
     if (error) return fail(message(error, "We couldn't start that upload. Try again."));
     try {
@@ -1342,6 +1354,23 @@ export class RealServerService implements ServerBackendService {
     }
     const { error } = await sb.rpc("v2_finish_upload", { p_id: id });
     return error ? notSaved(message(error, "The file didn't arrive whole. Try adding it again.")) : saved;
+  }
+
+  async abortUpload({ id }: { id: string }): Promise<MutationResult> {
+    const sb = await createClient();
+    const result = await sb.rpc("v1_abort_upload", { p_id: id });
+    if (result.error) return notSaved(message(result.error, TRY_AGAIN));
+    await this.forgetObjects((result.data as string[] | null) ?? []);
+    return saved;
+  }
+
+  /** deletes objects whose row is gone; if S3 fails, the daily clean-up (app/api/cron/files-cleanup) gets them */
+  private async forgetObjects(paths: string[]) {
+    try {
+      await deleteObjects(paths);
+    } catch (e) {
+      console.error("[s3] delete objects", e instanceof Error ? e.message : e);
+    }
   }
 
   async renameFile({ id, name }: { id: string; name: string }): Promise<MutationResult> {

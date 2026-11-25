@@ -31,6 +31,12 @@ export class StubJobsService implements JobsBackendService {
     return Promise.resolve();
   }
 
+  cleanUpFiles() {
+    // the stub's uploads abort themselves and its bucket lives only as long as the dev server, so there's nothing to sweep
+    console.log("[stub] cleanUpFiles");
+    return Promise.resolve({ data: { staleUploads: 0, objects: 0 } });
+  }
+
   calendarFeed({ token }: { token: string }) {
     console.log("[stub] calendarFeed");
     const w = world();

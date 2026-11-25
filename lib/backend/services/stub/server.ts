@@ -48,7 +48,7 @@ import { BRANDON, blankState, type StubChallenge } from "@/lib/backend/services/
 import { state, world } from "@/lib/backend/services/stub/state";
 import { monthOf } from "@/lib/files/gallery";
 import { canAddTogether, TOO_MANY_TOGETHERS } from "@/lib/together/limits";
-import { duplicateMatches, filesOf, newRow, normaliseTags, QUOTA_BYTES, signUpload, stubStorage, toSharedFile, type StubFiles } from "@/lib/backend/services/stub/files";
+import { duplicateMatches, filesOf, isStuckUpload, newRow, normaliseTags, QUOTA_BYTES, signUpload, stubStorage, toSharedFile, type StubFiles } from "@/lib/backend/services/stub/files";
 
 // The stub keeps its state in memory for the life of the server process (kept across hot reloads on globalThis): every
 // Together it knows, and which one is open. state() is the open Together's data.
@@ -828,7 +828,13 @@ export class StubServerService implements ServerBackendService {
     log("startUpload", { name: upload.name, bytes: upload.storedBytes });
     const files = await this.myFiles();
     if (!files || state().together?.id !== togetherId) return fail<StartedUpload>(NO_TOGETHER);
-    if (files.files.some((f) => f.contentMac === upload.contentMac)) return ok<StartedUpload>({ duplicate: true });
+    const copy = files.files.find((f) => f.contentMac === upload.contentMac);
+    if (copy && !isStuckUpload(copy, ME)) return ok<StartedUpload>({ duplicate: true });
+    if (copy) {
+      // an upload of this file that never finished: clear it so this one can go ahead
+      files.files = files.files.filter((f) => f !== copy);
+      stubStorage.remove([copy.originalPath, copy.thumbPath, copy.previewPath]);
+    }
     if (upload.folderId && !files.folders.some((f) => f.id === upload.folderId)) return fail<StartedUpload>("That folder isn't there any more.");
     const used = files.files.reduce((sum, f) => sum + f.storedBytes, 0);
     if (used + upload.storedBytes > QUOTA_BYTES) return fail<StartedUpload>("Not enough space left in your Together for this file.");
@@ -852,6 +858,18 @@ export class StubServerService implements ServerBackendService {
     if (parts.some((b) => !b) || size > file.storedBytes) return notDone("The file didn't arrive whole. Try adding it again.");
     file.storedBytes = size;
     file.status = "ready";
+    return done;
+  }
+
+  async abortUpload({ id: fileId }: { id: string }) {
+    await wait();
+    log("abortUpload", { id: fileId });
+    const files = await this.myFiles();
+    const file = files?.files.find((f) => f.id === fileId && f.uploadedBy === ME && f.status === "uploading");
+    if (files && file) {
+      files.files = files.files.filter((f) => f !== file);
+      stubStorage.remove([file.originalPath, file.thumbPath, file.previewPath]);
+    }
     return done;
   }
 
