@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeftIcon, MapPinIcon, NavigationIcon } from "lucide-react";
@@ -61,9 +61,9 @@ export function PlaceFormScreen(props: PlaceFormScreenProps) {
       <FormHeader
         title={title}
         back={
-          <Link href={backHref} aria-label="Back" className={iconButtonVariants({ variant: "surface" })}>
+          <NavLink href={backHref} aria-label="Back" className={iconButtonVariants({ variant: "surface" })}>
             <ChevronLeftIcon />
-          </Link>
+          </NavLink>
         }
       />
 
@@ -96,9 +96,9 @@ export function PlaceFormScreen(props: PlaceFormScreenProps) {
               </div>
               <div className="flex items-center gap-3 pl-[30px]">
                 <span className="flex-1 truncate text-caption text-ink-subtle">From Google Maps</span>
-                <Link href={address.changeHref} className="shrink-0 text-callout text-accent-ink">
+                <NavLink href={address.changeHref} pending="spinner" className="shrink-0 text-callout text-accent-ink">
                   Change place
-                </Link>
+                </NavLink>
                 <button type="button" onClick={address.onUnlink} disabled={address.unlinking} className="shrink-0 text-callout text-ink-muted hover:text-ink disabled:opacity-50">
                   Unlink
                 </button>

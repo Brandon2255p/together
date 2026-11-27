@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { BellIcon, BellOffIcon, ChevronLeftIcon, DownloadIcon, LogOutIcon, ShareIcon, UserRoundIcon } from "lucide-react";
 import type { Member } from "@/lib/models";
@@ -51,9 +51,9 @@ export function ProfileScreen(props: ProfileScreenProps) {
   return (
     <Reveal className="flex flex-col gap-6">
       <RevealItem className="flex flex-col gap-4">
-        <Link href={backHref} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface" })}>
+        <NavLink href={backHref} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface" })}>
           <ChevronLeftIcon aria-hidden />
-        </Link>
+        </NavLink>
         <ScreenHeader eyebrow={togetherName} title="You" />
       </RevealItem>
 

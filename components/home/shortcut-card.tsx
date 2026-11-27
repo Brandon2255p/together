@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { IconBadge } from "@/components/ui/layout";
 
@@ -23,7 +23,7 @@ export function ShortcutCard({
   dot?: boolean;
 }) {
   return (
-    <Link
+    <NavLink
       href={href}
       aria-label={ariaLabel}
       className="relative flex aspect-square min-w-0 flex-col items-center justify-center gap-2 rounded-3xl bg-surface px-1 transition-transform active:scale-[0.97]"
@@ -33,6 +33,6 @@ export function ShortcutCard({
       </IconBadge>
       <span className="w-full truncate text-center text-caption text-ink">{label}</span>
       {dot ? <span aria-hidden className="absolute top-3 right-3 size-2.5 rounded-full bg-accent ring-2 ring-surface" /> : null}
-    </Link>
+    </NavLink>
   );
 }

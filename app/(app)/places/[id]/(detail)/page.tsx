@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { getPlacePlans, getPlaceWithGoogle } from "@/lib/actions/places";
-import { requireTogether } from "../../_lib/load";
+import { requireTogether } from "../../../_lib/load";
 import { PlaceDetailView } from "./view";
 
 export const metadata: Metadata = { title: "Place" };

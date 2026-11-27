@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { useReducedMotion } from "motion/react";
 import { ChevronLeftIcon, HeartIcon, LinkIcon, PlusIcon } from "lucide-react";
@@ -71,9 +71,9 @@ export function TogethersScreen(props: TogethersScreenProps) {
   return (
     <div className="flex min-h-[calc(100dvh-3rem)] flex-col gap-5">
       {openingBubble ? <OpeningOverlay name={openingBubble.name} colors={TONE_COLORS[openingBubble.tone]} /> : null}
-      <Link href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface", size: "md" })}>
+      <NavLink href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface", size: "md" })}>
         <ChevronLeftIcon aria-hidden />
-      </Link>
+      </NavLink>
       <ScreenHeader eyebrow={`${bubbles.length} Together${bubbles.length === 1 ? "" : "s"}`} title="Your Togethers" />
       <p className="-mt-3 text-callout text-ink-muted">Bigger bubbles have more going on. Tap one to open it.</p>
 

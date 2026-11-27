@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { EllipsisIcon, FolderIcon } from "lucide-react";
 import type { Hue } from "@/lib/models";
@@ -61,7 +61,7 @@ export interface FolderCardData {
 /** A folder on the drive */
 export function FolderCard({ folder }: { folder: FolderCardData }) {
   return (
-    <Link href={folder.href} className="flex min-w-0 items-center gap-3 rounded-card bg-surface p-3.5 transition-transform duration-200 active:scale-[0.98]">
+    <NavLink href={folder.href} className="flex min-w-0 items-center gap-3 rounded-card bg-surface p-3.5 transition-transform duration-200 active:scale-[0.98]">
       <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl [&_svg]:size-5", SOFT[folder.hue])}>
         <FolderIcon aria-hidden />
       </span>
@@ -69,6 +69,6 @@ export function FolderCard({ folder }: { folder: FolderCardData }) {
         <span className="truncate text-body">{folder.name}</span>
         <span className="text-caption text-ink-muted">{folder.count}</span>
       </span>
-    </Link>
+    </NavLink>
   );
 }

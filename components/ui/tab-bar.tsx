@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { useState } from "react";
 import { motion } from "motion/react";
@@ -40,7 +40,7 @@ export function TabBar<K extends string>({
       {items.map((item) => {
         const selected = item.key === current;
         return (
-          <Link
+          <NavLink
             key={item.key}
             href={item.href}
             onClick={(e) => {
@@ -72,7 +72,7 @@ export function TabBar<K extends string>({
             ) : (
               <span className="sr-only">{item.label}</span>
             )}
-          </Link>
+          </NavLink>
         );
       })}
     </nav>

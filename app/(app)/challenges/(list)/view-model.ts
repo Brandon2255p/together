@@ -9,8 +9,8 @@ import { PERIOD_NOUN, startOptions, summarize } from "@/lib/challenges/streak";
 import { rangeLabel } from "@/lib/challenges/labels";
 import { addDays, dayDate } from "@/lib/format";
 import type { Challenge, ChallengeCadence, DayKey, Together } from "@/lib/models";
-import { challengeHref, toCard } from "../_lib/challenge-view";
-import { useServerState } from "../_lib/server-state";
+import { challengeHref, toCard } from "../../_lib/challenge-view";
+import { useServerState } from "../../_lib/server-state";
 
 export interface ChallengesViewData {
   together: Together;
@@ -60,12 +60,14 @@ export function useChallengesViewModel(data: ChallengesViewData) {
     setSheetError(null);
     setPending(true);
     const result = await addChallenge({ title, cadence: draft.cadence, startsOn: draft.start === "now" ? now : next, memberIds: draft.memberIds, goals });
-    setPending(false);
-    if (!result.data) return setSheetError(result.error ?? "Couldn't start that challenge. Try again.");
+    if (!result.data) {
+      setPending(false);
+      return setSheetError(result.error ?? "Couldn't start that challenge. Try again.");
+    }
     const added = result.data;
     setChallenges((cs) => [added, ...cs]);
-    setOpen(false);
-    setDraft(emptyDraft(together.meId));
+    // the sheet stays open and its button pending until the new challenge's screen takes over, so the tap is answered
+    // the whole way and can't be repeated
     router.push(challengeHref(added.id));
   }
 

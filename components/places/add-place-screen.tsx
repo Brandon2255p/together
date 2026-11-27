@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeftIcon, LinkIcon, LoaderCircleIcon, MapPinIcon, NavigationIcon, SearchIcon, StarIcon, XIcon } from "lucide-react";
@@ -62,9 +62,9 @@ export function AddPlaceSearch(props: AddPlaceSearchProps) {
       <FormHeader
         title={title}
         back={
-          <Link href={closeHref} aria-label="Close" className={iconButtonVariants({ variant: "surface" })}>
+          <NavLink href={closeHref} aria-label="Close" className={iconButtonVariants({ variant: "surface" })}>
             <XIcon />
-          </Link>
+          </NavLink>
         }
       />
       <TextField
@@ -142,9 +142,9 @@ export function AddPlaceSearch(props: AddPlaceSearchProps) {
           Got a Google Maps link? Paste it in the search box.
         </p>
         {manualHref ? (
-          <Link href={manualHref} className="py-3 text-center text-callout text-ink-muted hover:text-ink">
+          <NavLink href={manualHref} pending="spinner" className="py-3 text-center text-callout text-ink-muted hover:text-ink">
             Can&apos;t find it? Add it by hand
-          </Link>
+          </NavLink>
         ) : null}
       </div>
     </div>

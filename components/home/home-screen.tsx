@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
 import {
@@ -50,13 +50,13 @@ export interface HomeScreenProps {
 
 function Tile({ href, icon, tone, count, label }: { href: Route; icon: React.ReactNode; tone: "accent" | "partner"; count: number; label: string }) {
   return (
-    <Link href={href} className="flex flex-1 flex-col gap-3.5 rounded-3xl bg-surface p-4 transition-transform active:scale-[0.98]">
+    <NavLink href={href} className="flex flex-1 flex-col gap-3.5 rounded-3xl bg-surface p-4 transition-transform active:scale-[0.98]">
       <IconBadge tone={tone}>{icon}</IconBadge>
       <span className="flex flex-col">
         <span className="text-display-l">{count}</span>
         <span className="text-caption text-ink-muted">{label}</span>
       </span>
-    </Link>
+    </NavLink>
   );
 }
 
@@ -71,7 +71,7 @@ export function HomeScreen(props: HomeScreenProps) {
           title={greeting}
           actions={
             <>
-            <Link
+            <NavLink
               href={links.challenges}
               aria-label={`Challenges: ${streak.count} streak${streak.atRisk ? ", one needs a booster" : ""}`}
               className="relative flex h-9 items-center gap-1 rounded-full border border-line bg-surface pr-3 pl-2.5 text-body-strong transition-transform active:scale-[0.95]"
@@ -79,17 +79,17 @@ export function HomeScreen(props: HomeScreenProps) {
               <Flame cold={streak.count === 0} flicker={streak.count > 0} className="h-5 w-4" />
               {streak.count}
               {streak.atRisk ? <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-partner ring-2 ring-bg" /> : null}
-            </Link>
-            <Link href={links.profile} aria-label="You: your name and signing out" className={iconButtonVariants({ variant: "surface", size: "sm" })}>
+            </NavLink>
+            <NavLink href={links.profile} aria-label="You: your name and signing out" className={iconButtonVariants({ variant: "surface", size: "sm" })}>
               <UserRoundIcon aria-hidden />
-            </Link>
+            </NavLink>
             </>
           }
         />
       </RevealItem>
 
       <RevealItem>
-        <Link
+        <NavLink
           href={links.calendar}
           className="relative isolate flex flex-col gap-3.5 overflow-hidden rounded-card bg-ink p-5 text-on-accent transition-transform active:scale-[0.99]"
         >
@@ -110,7 +110,7 @@ export function HomeScreen(props: HomeScreenProps) {
           ) : (
             <span className="text-display-l">A free evening</span>
           )}
-        </Link>
+        </NavLink>
       </RevealItem>
 
       <RevealItem className="flex flex-col gap-3">
@@ -122,7 +122,7 @@ export function HomeScreen(props: HomeScreenProps) {
       </RevealItem>
 
       <RevealItem className="flex flex-col gap-3">
-        <SectionHeader title="Due today" action={<Link href={links.chores}>See all</Link>} />
+        <SectionHeader title="Due today" action={<NavLink href={links.chores} pending="spinner">See all</NavLink>} />
         <InlineError>{error}</InlineError>
         {dueToday.length ? (
           <ul className="flex flex-col gap-2">
