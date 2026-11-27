@@ -3,8 +3,10 @@
 -- thumb.bin and preview.bin for photos and videos.
 --
 -- Uploading: insert the row (status 'uploading'; the quota is checked here, triggers/files_quota.sql), upload the
--- objects (storage.sql only allows paths of your own uploading rows), then v1_finish_upload checks their real sizes
--- and makes the row 'ready'.
+-- objects to S3 with signed URLs, then the app's server checks their sizes and v2_finish_upload makes the row 'ready'.
+-- An upload that fails is undone by v1_abort_upload; one in the way of adding the same file again is cleared by
+-- v1_release_stuck_upload; and the daily clean-up (v1_sweep_stale_uploads) removes any left an hour on, along with
+-- objects that have no row. So a row that isn't 'ready' never lasts, and neither does an object without a row.
 --
 -- The bin: deleted_at set. Nothing is hard-deleted by members (no delete policy); the purge job removes rows and
 -- objects 30 days later. See docs/plans/shared-files.md.

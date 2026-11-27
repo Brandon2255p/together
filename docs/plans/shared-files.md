@@ -254,7 +254,15 @@ so that this needs no schema reshuffle.
      over 6 MB use resumable (TUS) uploads.
   4. It calls `finishUpload`, which runs `v1_finish_upload`.
 
-  Rows still `uploading` after a day are removed by the purge job, which frees their quota.
+  **Uploads that don't finish** (built with S3) never leave a row or an object behind:
+  - If a send or the size check fails, the browser calls `abortUpload`. `v1_abort_upload` deletes the row (the
+    uploader's own, still `uploading`) and the server deletes whatever objects reached S3.
+  - If an unfinished row is still in the way when the same file is added again (the duplicate guard counts it),
+    `startUpload` clears it with `v1_release_stuck_upload` and tries once more. That clears your own unfinished
+    upload straight away, and anyone's once it's older than 20 minutes (its signed URLs last 15).
+  - The daily `app/api/cron/files-cleanup` (`JobsBackendService.cleanUpFiles()`) deletes rows still `uploading` an
+    hour on (`v1_sweep_stale_uploads`) with their objects, then lists the bucket and deletes objects older than an hour
+    that have no row. That catches a closed tab, a lost connection, or an S3 delete that failed.
 - **Reads** use signed URLs (`createSignedUrls`, batched per page, valid for an hour). The gallery loads only thumbs; the
   viewer loads the preview; the original is fetched only by Download.
 
@@ -309,7 +317,7 @@ Supabase Image Transformations can't help here, because the stored objects are e
 - **Days left** is shown as `30 − days since deleted_at` (helper in `lib/files/bin.ts`, tested).
 - **Purge job** `app/api/cron/purge-bin`, daily in `vercel.json`, through `JobsBackendService.purgeBin()` with the
   secret key:
-  1. Select rows binned more than 30 days ago, and stale `uploading` rows.
+  1. Select rows binned more than 30 days ago (stale `uploading` rows are the files clean-up's, above).
   2. Remove their Storage objects in batches of 100.
   3. Delete the rows.
 

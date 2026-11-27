@@ -85,6 +85,10 @@ export async function finishUpload(id: string) {
   return serverBackend.finishUpload({ id });
 }
 
+export async function abortUpload(id: string) {
+  return serverBackend.abortUpload({ id });
+}
+
 export async function renameFile(id: string, name: string) {
   const clean = fileName(name);
   if (!clean) return { success: false, error: "Give it a name." };

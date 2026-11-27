@@ -134,10 +134,11 @@ resource "aws_iam_role" "vercel" {
 }
 
 # Signed requests act with the signer's rights: the app signs uploads (PutObject), downloads (GetObject), and checks
-# an upload arrived (HeadObject, which needs GetObject; ListBucket makes a missing object a 404, not a 403).
+# an upload arrived (HeadObject, which needs GetObject; ListBucket makes a missing object a 404, not a 403). It
+# deletes the objects of uploads that didn't finish, and the daily clean-up lists the bucket for objects with no row.
 data "aws_iam_policy_document" "vercel" {
   statement {
-    actions   = ["s3:GetObject", "s3:PutObject"]
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.files.arn}/*"]
   }
   statement {

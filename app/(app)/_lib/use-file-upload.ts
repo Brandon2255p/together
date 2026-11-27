@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { filesKeys, findDuplicates, finishUpload, restoreFile, startUpload, storageUsage } from "@/lib/actions/files";
+import { abortUpload, filesKeys, findDuplicates, finishUpload, restoreFile, startUpload, storageUsage } from "@/lib/actions/files";
 import { browserBackend } from "@/lib/backend/browser";
 import { contentMac, encryptedSize, encryptFile } from "@/lib/files/crypto";
 import { keyring, type Keyring } from "@/lib/files/client/keyring";
@@ -157,9 +157,17 @@ export function useFileUpload({ together, prepare, folderId, noun, onAdded, onRe
           thumb && thumbTarget ? browserBackend.uploadFileObject({ target: thumbTarget, body: thumb }) : Promise.resolve(null),
           preview && previewTarget ? browserBackend.uploadFileObject({ target: previewTarget, body: preview }) : Promise.resolve(null),
         ];
-        const sent = await Promise.all(sends);
-        const finished = sent.some((s) => s?.error) ? { success: false } : await finishUpload(id);
-        if (!finished.success) {
+        // the row exists from here on: if anything fails, abort it, so it neither blocks adding this file again nor
+        // leaves objects behind (what the abort misses, the daily clean-up removes)
+        let finished = false;
+        try {
+          const sent = await Promise.all(sends);
+          finished = !sent.some((s) => s?.error) && (await finishUpload(id)).success;
+        } catch {
+          finished = false;
+        }
+        if (!finished) {
+          await abortUpload(id).catch(() => undefined);
           failed.push(file.name);
           continue;
         }

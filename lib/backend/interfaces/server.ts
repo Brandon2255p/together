@@ -179,6 +179,8 @@ export interface ServerBackendService {
   startUpload(params: { togetherId: string } & NewUpload): Promise<DataResult<StartedUpload>>;
   /** checks the uploaded bytes are there and the right size, then makes the file show */
   finishUpload(params: { id: string }): Promise<MutationResult>;
+  /** an upload that won't finish (a send or the check failed): drops its row and deletes whatever reached storage */
+  abortUpload(params: { id: string }): Promise<MutationResult>;
   renameFile(params: { id: string; name: string }): Promise<MutationResult>;
   /** null takes it out of any folder */
   moveFile(params: { id: string; folderId: string | null }): Promise<MutationResult>;
