@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { getPlaces } from "@/lib/actions/places";
-import { must, requireTogether } from "../_lib/load";
+import { must, requireTogether } from "../../_lib/load";
 import { PlacesView } from "./view";
 
 export const metadata: Metadata = { title: "Places" };

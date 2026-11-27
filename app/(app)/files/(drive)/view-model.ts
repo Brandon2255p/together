@@ -24,8 +24,8 @@ import type { Documents, Hue, SharedFile, Together } from "@/lib/models";
 import type { DocumentsScreenProps } from "@/components/files/documents-screen";
 import type { DocumentSheetProps } from "@/components/files/document-sheet";
 import type { FolderSheetData } from "@/components/files/folder-sheet";
-import { asDocument, togetherKeys, useFileUpload } from "../_lib/use-file-upload";
-import { useServerState } from "../_lib/server-state";
+import { asDocument, togetherKeys, useFileUpload } from "../../_lib/use-file-upload";
+import { useServerState } from "../../_lib/server-state";
 
 const folderHref = (id: string) => `/files/folders/${id}` as Route;
 const TRY_AGAIN = "That didn't work. Try again.";
@@ -158,8 +158,9 @@ export function useDocumentsViewModel(initial: Documents, together: Together, fo
       setFolderPending(false);
       return setFolderError(result.error ?? TRY_AGAIN);
     }
+    // stays pending until Files takes over. No refresh(): replace already loads /files fresh, and a refresh straight
+    // after it could reload the folder that's just been deleted
     router.replace("/files");
-    router.refresh();
   }
 
   const tags = folderId ? [] : topTags(docs.files).map((t) => ({ tag: t, label: tagLabel(t) }));

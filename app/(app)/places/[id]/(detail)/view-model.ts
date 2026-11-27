@@ -10,8 +10,8 @@ import { logVisit, setPlaceNote } from "@/lib/actions/places";
 import { addDays, dayAndMonth, dayDate, dueLabel, todayKey } from "@/lib/format";
 import type { CalendarEvent, GooglePlaceDetails, Member, Place, Together } from "@/lib/models";
 import { hoursLabel } from "@/lib/places/preview";
-import { TEMP } from "../../_lib/optimistic";
-import { useServerState } from "../../_lib/server-state";
+import { TEMP } from "../../../_lib/optimistic";
+import { useServerState } from "../../../_lib/server-state";
 
 export interface PlaceDetailViewData {
   place: Place;

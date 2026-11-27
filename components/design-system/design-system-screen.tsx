@@ -16,12 +16,14 @@ import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Chip, PillButton } from "@/components/ui/chip";
-import { IconButton } from "@/components/ui/icon-button";
+import { IconButton, iconButtonVariants } from "@/components/ui/icon-button";
 import { Card, EmptyState, IconBadge, InlineError, ScreenHeader, SectionHeader } from "@/components/ui/layout";
+import { NavLink } from "@/components/ui/nav-link";
 import { Orb } from "@/components/ui/orb";
 import { OtpInput } from "@/components/ui/otp-input";
 import { Progress } from "@/components/ui/progress";
 import { Segmented } from "@/components/ui/segmented";
+import { ScreenSkeleton } from "@/components/ui/skeleton";
 import { Sheet } from "@/components/ui/sheet";
 import { TabBar } from "@/components/ui/tab-bar";
 import { TaskRow } from "@/components/ui/task-row";
@@ -383,6 +385,26 @@ export function DesignSystemScreen(p: DesignSystemScreenProps) {
             ]}
           />
         </div>
+      </Section>
+
+      <Section title="Loading">
+        <p className="text-callout text-ink-muted">
+          Every link between screens is a NavLink: when the next screen takes more than a moment, the link tints (cards,
+          rows, round buttons) or spins (text links), so nobody taps again. Every screen that loads data has a
+          loading.tsx shaped like it.
+        </p>
+        <div className="flex items-center gap-3">
+          <NavLink href="/home" aria-label="Home" className={iconButtonVariants({ variant: "surface" })}>
+            <HouseIcon aria-hidden />
+          </NavLink>
+          <NavLink href="/home" pending="spinner" className="flex items-center text-callout text-accent-ink">
+            See all
+          </NavLink>
+        </div>
+        <Label>Screen skeleton</Label>
+        <Card>
+          <ScreenSkeleton title="Challenges" back="button" card rows={2} />
+        </Card>
       </Section>
 
       <Sheet open={p.sheetOpen} onOpenChange={p.onSheetOpenChange} title="New chore" eyebrow="Sheet">

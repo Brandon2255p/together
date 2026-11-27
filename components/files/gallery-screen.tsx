@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { ChevronLeftIcon, ImagesIcon, LoaderCircleIcon, SearchIcon, UploadIcon, XIcon } from "lucide-react";
 import { PillButton } from "@/components/ui/chip";
@@ -70,10 +70,10 @@ export function GalleryScreen(props: GalleryScreenProps) {
     <>
       <Reveal className="flex flex-col gap-5 pb-8">
         <RevealItem className="flex flex-col gap-1">
-          <Link href={back.href} className="flex w-fit items-center gap-0.5 text-callout text-accent-ink">
+          <NavLink href={back.href} pending="spinner" className="flex w-fit items-center gap-0.5 text-callout text-accent-ink">
             <ChevronLeftIcon aria-hidden className="size-4" />
             {back.label}
-          </Link>
+          </NavLink>
           <ScreenHeader
             title="Gallery"
             actions={

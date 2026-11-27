@@ -49,12 +49,15 @@ export function SkeletonRow({ delay = 0, className }: { delay?: number; classNam
  */
 export function ScreenSkeleton({
   title,
+  back,
   segmented = false,
   card = false,
   rows = 4,
 }: {
   /** the screen's title; leave it out when it depends on the data (home's greeting) */
   title?: string;
+  /** a screen pushed from another: a round back button ("button") or a "‹ Home" text link above the title ("link") */
+  back?: "button" | "link";
   segmented?: boolean;
   /** a big card above the rows (home's "Up next", the calendar's month) */
   card?: boolean;
@@ -62,6 +65,8 @@ export function ScreenSkeleton({
 }) {
   return (
     <SkeletonGroup label={title ? `Loading ${title.toLowerCase()}…` : "Loading…"} className="flex flex-col gap-5">
+      {back === "button" ? <Skeleton className="size-11 rounded-full" /> : null}
+      {back === "link" ? <Skeleton className="-mb-3 h-4 w-16 rounded-full" /> : null}
       {title ? (
         <ScreenHeader title={title} />
       ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import type { InvitePreview } from "@/lib/models";
 import { AvatarStack } from "@/components/ui/avatar";
@@ -60,9 +60,9 @@ export function JoinScreen({ invite, code, onJoin, pending, error, elsewhere }: 
             Join {invite.name}
           </Button>
         ) : null}
-        <Link href={elsewhere.href} className={buttonVariants({ variant: "ghost", block: true })}>
+        <NavLink href={elsewhere.href} className={buttonVariants({ variant: "ghost", block: true })}>
           {elsewhere.label}
-        </Link>
+        </NavLink>
       </div>
     </main>
   );

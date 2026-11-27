@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { AnimatePresence, motion } from "motion/react";
 import { CheckIcon, ChevronLeftIcon, PlusIcon, TrophyIcon } from "lucide-react";
@@ -79,7 +79,7 @@ export function StreakPill({ streak, warm, className }: { streak: number; warm?:
 
 function ChallengeCard({ c }: { c: ChallengeCardData }) {
   return (
-    <Link href={c.href} className="flex flex-col gap-3 rounded-3xl bg-surface p-4 shadow-card transition-transform active:scale-[0.99]">
+    <NavLink href={c.href} className="flex flex-col gap-3 rounded-3xl bg-surface p-4 shadow-card transition-transform active:scale-[0.99]">
       <span className="flex items-start justify-between gap-3">
         <span className="flex min-w-0 flex-col gap-2">
           <span className="truncate text-body-strong">{c.title}</span>
@@ -107,7 +107,7 @@ function ChallengeCard({ c }: { c: ChallengeCardData }) {
           </span>
         )}
       </span>
-    </Link>
+    </NavLink>
   );
 }
 
@@ -116,9 +116,9 @@ export function ChallengesScreen({ back, hero, challenges, onNew, sheet, error }
     <Reveal className="flex flex-col gap-5">
       <RevealItem className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <Link href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface" })}>
+          <NavLink href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface" })}>
             <ChevronLeftIcon aria-hidden />
-          </Link>
+          </NavLink>
           <button type="button" aria-label="New challenge" onClick={onNew} className={iconButtonVariants({ variant: "ink" })}>
             <PlusIcon aria-hidden />
           </button>

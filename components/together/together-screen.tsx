@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
 import { ChevronLeftIcon, CopyIcon, HeartIcon, LogOutIcon, PencilIcon, ShareIcon, UserPlusIcon } from "lucide-react";
@@ -82,9 +82,9 @@ export function TogetherScreen(props: TogetherScreenProps) {
   return (
     <Reveal className="flex flex-col gap-5">
       <RevealItem>
-        <Link href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface", size: "md" })}>
+        <NavLink href={back} aria-label="Back to Home" className={iconButtonVariants({ variant: "surface", size: "md" })}>
           <ChevronLeftIcon aria-hidden />
-        </Link>
+        </NavLink>
       </RevealItem>
       <RevealItem>
         <ScreenHeader

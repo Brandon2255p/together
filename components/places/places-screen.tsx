@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { AnimatePresence } from "motion/react";
 import { ArrowDownIcon, MapPinIcon, PlusIcon, Settings2Icon, XIcon } from "lucide-react";
@@ -54,9 +54,9 @@ export function PlacesScreen(props: PlacesScreenProps) {
       <ScreenHeader
         title="Places"
         actions={
-          <Link href={addHref} aria-label="Add a place" className={iconButtonVariants({ variant: "surface" })}>
+          <NavLink href={addHref} aria-label="Add a place" className={iconButtonVariants({ variant: "surface" })}>
             <PlusIcon />
-          </Link>
+          </NavLink>
         }
       />
       <Segmented
@@ -119,7 +119,7 @@ export function PlacesScreen(props: PlacesScreenProps) {
 
 function PlaceCard({ place: p }: { place: PlaceCardData }) {
   return (
-    <Link
+    <NavLink
       href={p.href}
       className={cn("flex items-center gap-3.5 rounded-3xl bg-surface p-3 pr-4 transition-transform active:scale-[0.99]")}
     >
@@ -134,6 +134,6 @@ function PlaceCard({ place: p }: { place: PlaceCardData }) {
           </span>
         ) : null}
       </span>
-    </Link>
+    </NavLink>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { motion, useScroll, useTransform } from "motion/react";
 import {
@@ -115,12 +115,12 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
           </>
         ) : null}
         <div className="absolute inset-x-5 top-[max(1rem,env(safe-area-inset-top))] flex justify-between">
-          <Link href={backHref} aria-label="Back to places" className={iconButtonVariants({ variant: "glass" })}>
+          <NavLink href={backHref} aria-label="Back to places" className={iconButtonVariants({ variant: "glass" })}>
             <ChevronLeftIcon />
-          </Link>
-          <Link href={editHref} aria-label="Edit place" className={iconButtonVariants({ variant: "glass" })}>
+          </NavLink>
+          <NavLink href={editHref} aria-label="Edit place" className={iconButtonVariants({ variant: "glass" })}>
             <EllipsisIcon />
-          </Link>
+          </NavLink>
         </div>
       </motion.div>
 
@@ -215,7 +215,7 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
             <ul className="flex flex-col gap-2.5">
               {plans.map((plan) => (
                 <li key={plan.id}>
-                  <Link
+                  <NavLink
                     href={plan.href}
                     aria-disabled={plan.pending}
                     aria-label={`${plan.title}, ${plan.when}. Open in the calendar`}
@@ -234,7 +234,7 @@ export function PlaceDetailScreen(props: PlaceDetailScreenProps) {
                     </span>
                     {plan.people.length ? <AvatarStack members={plan.people} /> : null}
                     <ChevronRightIcon className="size-[18px] shrink-0 text-ink-subtle" aria-hidden />
-                  </Link>
+                  </NavLink>
                 </li>
               ))}
             </ul>

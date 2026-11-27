@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { ChevronLeftIcon, EllipsisIcon, FileIcon, SearchIcon, UploadIcon, XIcon } from "lucide-react";
 import { PillButton } from "@/components/ui/chip";
@@ -52,10 +52,10 @@ export function DocumentsScreen(props: DocumentsScreenProps) {
     <>
       <Reveal className="flex flex-col gap-5 pb-8">
         <RevealItem className="flex flex-col gap-1">
-          <Link href={back.href} className="flex w-fit items-center gap-0.5 text-callout text-accent-ink">
+          <NavLink href={back.href} pending="spinner" className="flex w-fit items-center gap-0.5 text-callout text-accent-ink">
             <ChevronLeftIcon aria-hidden className="size-4" />
             {back.label}
-          </Link>
+          </NavLink>
           <ScreenHeader
             title={title}
             actions={

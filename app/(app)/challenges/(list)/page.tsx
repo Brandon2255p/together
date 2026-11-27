@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { getChallenges } from "@/lib/actions/challenges";
 import { todayKey } from "@/lib/format";
-import { must, requireTogether } from "../_lib/load";
+import { must, requireTogether } from "../../_lib/load";
 import { ChallengesView } from "./view";
 
 export const metadata: Metadata = { title: "Challenges" };

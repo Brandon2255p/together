@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { getPlace, getPlaces, previewGooglePlace } from "@/lib/actions/places";
 import { usualArea } from "@/lib/places/address";
-import { must, requireTogether } from "../../_lib/load";
+import { must, requireTogether } from "../../../_lib/load";
 import { AddPlaceView } from "./view";
 
 export const metadata: Metadata = { title: "Add a place" };

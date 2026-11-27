@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/ui/nav-link";
 import type { Route } from "next";
 import { AnimatePresence, motion } from "motion/react";
 import { CheckIcon, ChevronLeftIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
@@ -57,6 +57,8 @@ export interface ChallengeScreenProps {
   celebration: Celebration | null;
   onCelebrationNext: () => void;
   onDelete: () => void;
+  /** the delete is on its way: the button spins and ignores taps */
+  deleting: boolean;
   error: string | null;
 }
 
@@ -162,7 +164,7 @@ function GoalRow({ goal, onCountChange }: { goal: GoalRowData; onCountChange: (g
 }
 
 export function ChallengeScreen(props: ChallengeScreenProps) {
-  const { back, title, cadence, tone, members, streak, streakNoun, bestLine, boosters, period, goals, onCountChange, historyTitle, history, atRisk, onOpenMissed, missed, celebration, onCelebrationNext, onDelete, error } = props;
+  const { back, title, cadence, tone, members, streak, streakNoun, bestLine, boosters, period, goals, onCountChange, historyTitle, history, atRisk, onOpenMissed, missed, celebration, onCelebrationNext, onDelete, deleting, error } = props;
   // UI-only: Delete asks once more
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const pips = boosters.every - boosters.toNext;
@@ -170,9 +172,9 @@ export function ChallengeScreen(props: ChallengeScreenProps) {
   return (
     <Reveal className="flex flex-col gap-5">
       <RevealItem className="flex flex-col gap-3">
-        <Link href={back} aria-label="Back to challenges" className={iconButtonVariants({ variant: "surface" })}>
+        <NavLink href={back} aria-label="Back to challenges" className={iconButtonVariants({ variant: "surface" })}>
           <ChevronLeftIcon aria-hidden />
-        </Link>
+        </NavLink>
         <span className="flex items-center justify-between gap-3">
           <Chip tone={tone}>{cadence}</Chip>
           {members.length > 1 ? <AvatarStack members={members} /> : null}
@@ -314,10 +316,10 @@ export function ChallengeScreen(props: ChallengeScreenProps) {
           <div className="flex flex-col gap-2">
             <p className="text-center text-caption text-ink-muted">Delete it and its streak for everyone? This can&apos;t be undone.</p>
             <div className="flex gap-2">
-              <Button variant="ghost" className="flex-1" onClick={() => setConfirmingDelete(false)}>
+              <Button variant="ghost" className="flex-1" disabled={deleting} onClick={() => setConfirmingDelete(false)}>
                 Keep it
               </Button>
-              <Button variant="accent" className="flex-1" onClick={onDelete}>
+              <Button variant="accent" className="flex-1" pending={deleting} onClick={onDelete}>
                 Delete
               </Button>
             </div>

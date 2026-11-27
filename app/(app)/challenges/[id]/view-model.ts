@@ -35,6 +35,7 @@ export function useChallengeViewModel(data: ChallengeViewData): ChallengeScreenP
   const router = useRouter();
   const [challenge, setChallenge] = useServerState(data.challenge);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [queue, setQueue] = useState<Celebration[]>([]);
   // a streak at risk offers the booster as soon as the challenge opens
   const [missedOpen, setMissedOpen] = useState(() => summarize(data.challenge, today).atRisk !== null);
@@ -92,8 +93,15 @@ export function useChallengeViewModel(data: ChallengeViewData): ChallengeScreenP
   }
 
   async function onDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    setError(null);
     const result = await deleteChallenge(challenge.id);
-    if (!result.success) return setError(result.error ?? "Couldn't delete that challenge.");
+    if (!result.success) {
+      setDeleting(false);
+      return setError(result.error ?? "Couldn't delete that challenge.");
+    }
+    // stays pending until Challenges takes over
     router.push("/challenges");
   }
 
@@ -159,6 +167,7 @@ export function useChallengeViewModel(data: ChallengeViewData): ChallengeScreenP
     celebration: queue[0] ?? null,
     onCelebrationNext: () => setQueue((q) => q.slice(1)),
     onDelete: () => void onDelete(),
+    deleting,
     error,
   };
 }
